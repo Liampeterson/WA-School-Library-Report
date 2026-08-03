@@ -951,14 +951,22 @@
             </div>
           </div>
         </div>
+      </div>
 
+      <div class="controls" style="margin-top:36px;">
+        <label>Year</label>
+        <input type="range" id="gapYearSlider" min="0" max="9" step="1" value="9" style="flex:1; max-width:320px;">
+        <span class="year-readout" id="gapYearReadout">2024&ndash;25</span>
+      </div>
+
+      <div class="dashboard-grid">
         <div class="dashboard-card">
           <div class="dashboard-card-header">
             <h3>Access Gap by Locale Tier</h3>
             <span class="dashboard-card-badge down" id="accessGapBadge">&mdash;</span>
           </div>
           <div class="dashboard-card-body">
-            <p class="dek" style="margin-bottom:12px;">Share of districts reporting zero librarian FTE, 2024&ndash;25, ordered rural to urban.</p>
+            <p class="dek" style="margin-bottom:12px;">Share of districts reporting zero librarian FTE, <span id="accessGapYearLabel">2024&ndash;25</span>, ordered rural to urban.</p>
             <div id="accessGapChart" style="height: 340px;"></div>
           </div>
         </div>
@@ -969,7 +977,7 @@
             <span class="dashboard-card-badge down" id="achievementGapBadge">&mdash;</span>
           </div>
           <div class="dashboard-card-body">
-            <p class="dek" style="margin-bottom:12px;">Average Grade 4 ELA "% met standard," 2024&ndash;25, same tier ordering as at left.</p>
+            <p class="dek" style="margin-bottom:12px;">Average Grade 4 ELA "% met standard," <span id="achievementGapYearLabel">2024&ndash;25</span>, same tier ordering as at left.</p>
             <div id="achievementGapChart" style="height: 340px;"></div>
           </div>
         </div>
@@ -1260,8 +1268,7 @@ Papa.parse("output/state_ela_trend.csv", {
 function init() {
   renderStatCards();
   renderStatewideTrendChart();
-  renderAccessGapChart();
-  renderAchievementGapChart();
+  initGapYearSlider();
   initRankingsSection();
 
   initScatterSection();
@@ -1269,6 +1276,21 @@ function init() {
   initTierCompareButtons();
   renderProfileFteChart(); // statewide-only default, before any district is searched
   initPageNav();
+}
+
+function initGapYearSlider() {
+  const slider = document.getElementById("gapYearSlider");
+  const readout = document.getElementById("gapYearReadout");
+
+  const renderForIdx = (idx) => {
+    const year = YEARS[idx];
+    readout.textContent = YEAR_LABELS[idx];
+    renderAccessGapChart(year);
+    renderAchievementGapChart(year);
+  };
+
+  slider.addEventListener("input", (e) => renderForIdx(parseInt(e.target.value, 10)));
+  renderForIdx(parseInt(slider.value, 10)); // initial render, defaults to 2024-25
 }
 
 // ---- Nav scroll-spy ----
@@ -1404,8 +1426,11 @@ function tierSnapshot(year, achievementField) {
 }
 
 // ---- Access Gap by Locale Tier ----
-function renderAccessGapChart() {
-  const stats = tierSnapshot("2024-25", "ela_pct_met_grade4");
+function renderAccessGapChart(year) {
+  const yearLabel = YEAR_LABELS[YEARS.indexOf(year)];
+  const stats = tierSnapshot(year, "ela_pct_met_grade4");
+
+  document.getElementById("accessGapYearLabel").textContent = yearLabel;
 
   Plotly.newPlot("accessGapChart", [{
     type: "bar",
@@ -1433,8 +1458,11 @@ function renderAccessGapChart() {
 }
 
 // ---- Achievement Gap by Locale Tier ----
-function renderAchievementGapChart() {
-  const stats = tierSnapshot("2024-25", "ela_pct_met_grade4");
+function renderAchievementGapChart(year) {
+  const yearLabel = YEAR_LABELS[YEARS.indexOf(year)];
+  const stats = tierSnapshot(year, "ela_pct_met_grade4");
+
+  document.getElementById("achievementGapYearLabel").textContent = yearLabel;
 
   Plotly.newPlot("achievementGapChart", [{
     type: "bar",
