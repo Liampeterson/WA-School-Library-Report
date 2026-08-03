@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Washington School Library Report Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root {
+    --bg: #F5F4F0;
+    --bg-alt: #ECE9E1;
+    --ink: #1A1A1A;
+    --ink-soft: #55534C;
+    --ink-faint: #8A8678;
+    --rule: #E5E5E0;
+    --rule-strong: #D3D1C8;
+
+    --accent: #1D3454;      /* Oxford ink blue -- structural/brand, used sparingly */
+    --accent-soft: rgba(29,52,84,0.07);
+
+    --signal-down: #A23B2E; /* reserved strictly for declining data */
+    --signal-up: #3C6B49;   /* reserved strictly for growing data */
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Defensive: the browser's default [hidden]{display:none} is easily
+     overridden by any class on the same element that sets its own
+     display property (e.g. display:flex for a header layout). Forcing
+     it here guarantees hidden elements actually stay hidden regardless
+     of what other classes are applied. */
+  [hidden] { display: none !important; }
+
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; animation: none !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 56px;
+  }
+
+  .wordmark {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 0.01em;
+  }
+
+  .wordmark span { color: var(--accent); }
+
+  .nav-links {
+    display: flex;
+    gap: 30px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-link {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--ink-soft);
+    padding-bottom: 4px;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .nav-link:hover { color: var(--ink); }
+
+  .nav-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .masthead { padding: 16px 20px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    .nav-links { gap: 18px; flex-wrap: wrap; }
+  }
+
+  /* ---- Page shell ---- */
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 56px;
+  }
+
+  @media (max-width: 760px) {
+    .page { padding: 0 20px; }
+  }
+
+  /* ---- Hero (centered, single column) ---- */
+  .hero {
+    padding: 72px 0 64px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .hero-centered {
+    text-align: center;
+  }
+
+  .hero-centered .eyebrow {
+    display: block;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: clamp(34px, 4.2vw, 54px);
+    line-height: 1.08;
+    margin: 14px auto 20px;
+    letter-spacing: -0.01em;
+  }
+
+  .hero .dek {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  /* ---- Page sections: only one visible at a time, nav switches between them ---- */
+  .page-section {
+    display: none;
+  }
+
+  .page-section.active {
+    display: block;
+  }
+
+  /* ---- Section blocks (no cards, hairline-separated) ---- */
+  .block {
+    padding: 64px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .block:last-of-type { border-bottom: none; }
+
+  .block-head {
+    margin-bottom: 36px;
+  }
+
+  .block-head .eyebrow { margin-bottom: 10px; }
+
+  .block-head h2 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    font-size: 28px;
+    margin: 0 0 10px;
+  }
+
+  .block-head .dek {
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    max-width: 620px;
+  }
+
+  /* ---- Dashboard card grid (finance-dashboard style panels) ---- */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin-top: 44px;
+  }
+
+  @media (max-width: 900px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+  }
+
+  .dashboard-card {
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .dashboard-card.wide {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 18px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  .dashboard-card-header h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0;
+    font-weight: 700;
+  }
+
+  .dashboard-card-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .dashboard-card-badge.down { background: var(--signal-down); }
+  .dashboard-card-badge.up { background: var(--signal-up); }
+  .dashboard-card-badge.neutral { background: var(--ink-faint); }
+
+  .dashboard-card-body {
+    padding: 20px 20px 16px;
+  }
+
+  /* ---- KPI grid: dense, gridlined, consulting-dashboard style ---- */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--rule-strong);
+    border-left: 1px solid var(--rule-strong);
+  }
+
+  @media (max-width: 820px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .kpi-tile {
+    padding: 22px 20px 18px;
+    border-right: 1px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
+    background: var(--bg);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .kpi-tile:hover {
+    background: #1A1A1A;
+  }
+
+  .kpi-tile:hover .kpi-label { color: rgba(255,255,255,0.55); }
+  .kpi-tile:hover .kpi-number { color: #F5F4F0; }
+  .kpi-tile:hover .kpi-number.down { color: #E8998C; }
+  .kpi-tile:hover .kpi-number.up { color: #8FC79B; }
+  .kpi-tile:hover .kpi-sub { color: rgba(255,255,255,0.7); }
+  .kpi-tile:hover .kpi-source { color: rgba(255,255,255,0.4); }
+
+  .kpi-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+    min-height: 26px;
+    transition: color 0.15s ease;
+  }
+
+  .kpi-number {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 36px;
+    line-height: 1;
+    transition: color 0.15s ease;
+  }
+
+  .kpi-number.down { color: var(--signal-down); }
+  .kpi-number.up { color: var(--signal-up); }
+
+  .kpi-sub {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+    transition: color 0.15s ease;
+  }
+
+  .kpi-source {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-faint);
+    margin-top: 6px;
+    font-style: italic;
+    transition: color 0.15s ease;
+  }
+
+  .kpi-note {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    border-left: 2px solid var(--rule-strong);
+    padding: 4px 0 4px 16px;
+    margin-top: 22px;
+    max-width: 780px;
+  }
+
+  /* ---- Editorial stat row (asymmetric: 1 lede + 3 supporting) ---- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 40px;
+  }
+
+  @media (max-width: 820px) {
+    .stat-row { grid-template-columns: 1fr 1fr; }
+  }
+
+  .stat {
+    padding-top: 16px;
+    border-top: 1px solid var(--ink);
+  }
+
+  .stat.support {
+    border-top: 1px solid var(--rule-strong);
+  }
+
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+  }
+
+  .stat-number {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 46px;
+    line-height: 1;
+  }
+
+  .stat.support .stat-number { font-size: 28px; }
+
+  .stat-number.down { color: var(--signal-down); }
+  .stat-number.up { color: var(--signal-up); }
+
+  .stat-sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+
+  /* ---- Controls ---- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11.5px;
+  }
+
+  .controls label {
+    color: var(--ink-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+
+  select, input[type="range"] {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 13px;
+    accent-color: var(--accent);
+  }
+
+  select {
+    padding: 7px 10px;
+    border: 1px solid var(--rule-strong);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 1px;
+    min-width: 190px;
+  }
+
+  .year-readout {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-style: italic;
+    color: var(--signal-down);
+  }
+
+  .control-block { margin-bottom: 18px; }
+
+  .control-block .control-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* ---- Two column layout ---- */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 40px;
+  }
+
+  @media (max-width: 900px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* ---- Ranking list ---- */
+  .rank-list {
+    max-height: 460px;
+    overflow-y: auto;
+  }
+
+  .rank-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 74px;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 12.5px;
+  }
+
+  .rank-row:last-child { border-bottom: none; }
+
+  .rank-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+
+  .rank-name { font-weight: 500; }
+
+  .rank-change {
+    font-family: 'Space Mono', monospace;
+    text-align: right;
+    font-weight: 700;
+  }
+
+  .rank-change.down { color: var(--signal-down); }
+  .rank-change.up { color: var(--signal-up); }
+  .rank-change.flat { color: var(--ink-faint); }
+
+  /* ---- Toggle buttons: text-underline style, not filled pills ---- */
+  .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+  }
+
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--ink-soft);
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 4px 0;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .btn:hover:not(.disabled) { color: var(--ink); }
+
+  .btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .btn.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* ---- Tier legend ---- */
+  .tier-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 14px;
+  }
+
+  .tier-legend .swatch {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .corr-list {
+    font-family: 'Space Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 16px;
+    line-height: 2;
+  }
+
+  .corr-list strong { color: var(--ink); }
+
+  .static-figure {
+    margin: 20px 0 10px;
+  }
+
+  .static-figure img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    display: block;
+  }
+
+  .figure-caption {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 10px;
+    max-width: 800px;
+    line-height: 1.6;
+  }
+
+  .analysis-subhead {
+    font-family: 'Playfair Display', serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+
+  .analysis-block {
+    margin-bottom: 52px;
+    padding-bottom: 44px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .analysis-block:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .note-box {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    border-left: 2px solid var(--rule-strong);
+    padding: 4px 0 4px 16px;
+    margin-top: 20px;
+    max-width: 720px;
+  }
+
+  .flag-note {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--bg-alt);
+    border-left: 3px solid var(--signal-down);
+    padding: 12px 16px;
+    margin-top: 18px;
+    border-radius: 2px;
+    max-width: 720px;
+  }
+
+  /* ---- District profile ---- */
+  .profile-search-wrap {
+    position: relative;
+    max-width: 440px;
+  }
+
+  .profile-search {
+    width: 100%;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--rule-strong);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 1px;
+  }
+
+  .profile-search:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .profile-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--rule-strong);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    z-index: 5;
+    display: none;
+  }
+
+  .profile-search-results.open { display: block; }
+
+  .profile-search-result {
+    padding: 10px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .profile-search-result:last-child { border-bottom: none; }
+
+  .profile-search-result:hover,
+  .profile-search-result.highlighted {
+    background: var(--accent-soft);
+  }
+
+  .profile-search-result .tier-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-left: 8px;
+  }
+
+  .profile-search-empty {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  .profile-empty-state {
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    padding: 18px 0 0;
+  }
+
+  .profile-content { margin-top: 40px; }
+
+  .profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 28px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .profile-district-name {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 25px;
+    line-height: 1.15;
+  }
+
+  .profile-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-top: 9px;
+  }
+
+  .profile-tier-badge .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* ---- Library staffing grade badge ---- */
+  .grade-block {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    max-width: 460px;
+  }
+
+  .grade-badge {
+    flex-shrink: 0;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 52px;
+    color: #fff;
+    background: var(--ink-faint);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  }
+
+  .grade-badge.grade-A { background: #3C6B49; }
+  .grade-badge.grade-B { background: #5B8A5E; }
+  .grade-badge.grade-C { background: #BB7E3D; }
+  .grade-badge.grade-D { background: #B0684A; }
+  .grade-badge.grade-F { background: var(--signal-down); }
+
+  .grade-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .grade-disclaimer {
+    font-size: 12px;
+    color: var(--ink-faint);
+    line-height: 1.5;
+  }
+
+  .methodology-link {
+    display: inline-block;
+    margin-top: 3px;
+    color: var(--accent);
+    text-decoration: underline;
+    font-family: 'Space Mono', monospace;
+    font-size: 10.5px;
+  }
+
+  .chart-fallback {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px;
+    color: var(--ink-faint);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .two-col-charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  @media (max-width: 800px) {
+    .two-col-charts { grid-template-columns: 1fr; }
+  }
+
+  .three-col-charts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  @media (max-width: 1000px) {
+    .three-col-charts { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 620px) {
+    .three-col-charts { grid-template-columns: 1fr; }
+  }
+
+  .chart-mini-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+  }
+
+  .profile-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+    gap: 26px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ink);
+    margin-bottom: 44px;
+  }
+
+  .profile-subhead {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    font-size: 17px;
+    margin: 0 0 18px;
+  }
+
+  .profile-section-gap { margin-top: 44px; }
+
+  footer {
+    padding: 36px 0 64px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    max-width: 720px;
+  }
+</style>
+</head>
+<body>
+
+  <header class="masthead">
+    <div class="wordmark"><span>&mdash;</span> WA Library Report Card</div>
+    <ul class="nav-links">
+      <li><a class="nav-link active" data-target="overview" href="#overview">Home</a></li>
+      <li><a class="nav-link" data-target="districtProfile" href="#districtProfile">District Report Card</a></li>
+      <li><a class="nav-link" data-target="rankings" href="#rankings">Rankings</a></li>
+      <li><a class="nav-link" data-target="correlation" href="#correlation">Advanced Analysis</a></li>
+    </ul>
+  </header>
+
+  <div class="page">
+
+    <section class="hero hero-centered">
+      <div class="eyebrow">Washington State &middot; OSPI Staffing Data &middot; 2015&ndash;16 to 2024&ndash;25</div>
+      <h1>The Decline of the<br>School Librarian in Washington</h1>
+      <p class="dek">A district-by-district look at ten years of certificated librarian staffing across Washington's public schools &mdash; where the positions disappeared, where they held on, and what it means for students.</p>
+    </section>
+
+    <section class="block page-section active" id="overview">
+      <div class="block-head">
+        <div class="eyebrow">01 &middot; Overview</div>
+        <h2>The Washington reading crisis, at a glance</h2>
+        <p class="dek">Washington spends more per student than most states, yet ranks near the bottom nationally on outcomes &mdash; and the students with the least access to a school librarian are disproportionately the ones already furthest behind.</p>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-tile">
+          <div class="kpi-label">National Education Rank</div>
+          <div class="kpi-number down">31st</div>
+          <div class="kpi-sub">of 50 states, down from 27th last year</div>
+          <div class="kpi-source">Annie E. Casey Foundation, 2026 KIDS COUNT Data Book</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Per-Pupil Spending Rank</div>
+          <div class="kpi-number up">17th</div>
+          <div class="kpi-sub">$18,564 per student, FY2024</div>
+          <div class="kpi-source">U.S. Census Bureau, Annual Survey of School System Finances</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Grade 4 Not Proficient in Reading</div>
+          <div class="kpi-number down">68%</div>
+          <div class="kpi-sub">Washington 4th graders, 2024</div>
+          <div class="kpi-source">Annie E. Casey Foundation (NAEP-based)</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Grade 8 Not Proficient in Reading</div>
+          <div class="kpi-number down">69%</div>
+          <div class="kpi-sub">Washington 8th graders, 2024</div>
+          <div class="kpi-source">Annie E. Casey Foundation (NAEP-based)</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Districts With Zero Librarians</div>
+          <div class="kpi-number down" id="statZeroPct">&mdash;</div>
+          <div class="kpi-sub" id="statZeroSub">&mdash;</div>
+          <div class="kpi-source">This project &mdash; OSPI SLIDE staffing data</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Drop in Librarian Staffing</div>
+          <div class="kpi-number down" id="statChange">&mdash;</div>
+          <div class="kpi-sub" id="statChangeSub">&mdash;</div>
+          <div class="kpi-source">This project &mdash; OSPI staffing data (FTE = full-time equivalent positions)</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Full-Time Librarian Positions Today</div>
+          <div class="kpi-number" id="statTotalNow">&mdash;</div>
+          <div class="kpi-sub">statewide total, 2024&ndash;25 school year</div>
+          <div class="kpi-source">This project &mdash; OSPI staffing data</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="kpi-label">Median Students / Librarian</div>
+          <div class="kpi-number" id="statRatio">&mdash;</div>
+          <div class="kpi-sub">among districts that still have one</div>
+          <div class="kpi-source">This project &mdash; OSPI staffing data</div>
+        </div>
+      </div>
+
+      <div class="kpi-note">
+        <strong>Reading note:</strong> the two 2024 "not proficient" figures above use the Annie E. Casey
+        Foundation's NAEP-based methodology, which applies a stricter proficiency bar than Washington's own
+        Smarter Balanced Assessment (SBA). Later sections of this dashboard use the SBA's "% met standard" measure
+        instead, which shows a less severe (but still concerning) rate &mdash; the two are different, valid measures
+        of reading achievement and should not be read as contradicting one another. See DATA_NOTES.md for full
+        sourcing and methodology.
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="dashboard-card wide">
+          <div class="dashboard-card-header">
+            <h3>Statewide ELA Achievement vs. Librarian Staffing</h3>
+            <span class="dashboard-card-badge down" id="statewideBadge">&mdash;</span>
+          </div>
+          <div class="dashboard-card-body">
+            <p class="dek" style="margin-bottom:16px;">Grade 4 and Grade 8 reading achievement plotted against statewide librarian FTE, on a shared timeline.</p>
+            <div id="statewideChart" style="height: 420px;"></div>
+            <div class="note-box">
+              <strong>Reading note:</strong> two things happening in the same years is not evidence that one caused the
+              other. <strong>2019&ndash;20 is excluded from this chart</strong> &mdash; Washington cancelled standardized
+              testing statewide that year due to COVID, so no reading achievement data exists for it at all. Rather than
+              show a broken line through a blank year, that year is simply skipped here; librarian staffing data does
+              exist for 2019&ndash;20 and appears in the other charts on this page.
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3>Access Gap by Locale Tier</h3>
+            <span class="dashboard-card-badge down" id="accessGapBadge">&mdash;</span>
+          </div>
+          <div class="dashboard-card-body">
+            <p class="dek" style="margin-bottom:12px;">Share of districts reporting zero librarian FTE, 2024&ndash;25, ordered rural to urban.</p>
+            <div id="accessGapChart" style="height: 340px;"></div>
+          </div>
+        </div>
+
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3>Achievement Gap by Locale Tier</h3>
+            <span class="dashboard-card-badge down" id="achievementGapBadge">&mdash;</span>
+          </div>
+          <div class="dashboard-card-body">
+            <p class="dek" style="margin-bottom:12px;">Average Grade 4 ELA "% met standard," 2024&ndash;25, same tier ordering as at left.</p>
+            <div id="achievementGapChart" style="height: 340px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block page-section" id="districtProfile">
+      <div class="block-head">
+        <div class="eyebrow">02 &middot; District Report Card</div>
+        <h2>District Report Card</h2>
+        <p class="dek">The chart below starts with Washington's statewide librarian staffing trend. Search for any of the state's 298 districts to add it to the chart and compare it directly against its own locale tier and the state as a whole.</p>
+      </div>
+
+      <div class="profile-search-wrap">
+        <input type="text" id="districtSearch" class="profile-search" placeholder="Search for a district&hellip;" autocomplete="off" aria-label="Search for a district" aria-expanded="false" role="combobox">
+        <div class="profile-search-results" id="profileSearchResults" role="listbox"></div>
+      </div>
+
+      <div class="profile-header" id="profileHeader" hidden>
+        <div class="grade-block">
+          <div class="grade-badge" id="gradeBadgeEl">&mdash;</div>
+          <div class="grade-info">
+            <div class="grade-label">Library Staffing Grade</div>
+            <div class="grade-disclaimer">
+              Reflects librarian staffing levels relative to other WA districts this year &mdash; not reading
+              scores, funding, or overall school quality.
+              <a href="DATA_NOTES.md" target="_blank" rel="noopener" class="methodology-link">How this grade is calculated &#8599;</a>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="profile-district-name" id="profileDistrictName">&mdash;</div>
+          <div class="profile-tier-badge" id="profileTierBadge"></div>
+        </div>
+      </div>
+
+      <div class="control-block" id="tierCompareBlock" style="margin-top:28px;">
+        <span class="control-label">Compare a locale tier to the statewide average</span>
+        <div class="btn-group" id="tierCompareButtons">
+          <button class="btn" data-tier="Distant Rural" type="button">Distant Rural</button>
+          <button class="btn" data-tier="Rural" type="button">Rural</button>
+          <button class="btn" data-tier="Mid-size" type="button">Mid-size</button>
+          <button class="btn" data-tier="Suburban" type="button">Suburban</button>
+          <button class="btn" data-tier="Urban" type="button">Urban</button>
+          <button class="btn" data-tier="Large Urban" type="button">Large Urban</button>
+        </div>
+      </div>
+
+      <h3 class="profile-subhead" style="margin-top:20px;">Librarian staffing, 2015&ndash;2025</h3>
+      <div id="profileFteChart" style="height: 360px;"></div>
+      <p class="profile-empty-state" id="profileEmptyState">Showing the statewide average. Select a locale tier above to compare it, or search above to add your district.</p>
+
+      <div class="profile-content" id="profileContent" hidden>
+        <div class="btn-group" id="profileViewToggle" style="margin-top:36px;">
+          <button class="btn active" data-view="time" type="button">Over Time</button>
+          <button class="btn" data-view="single" type="button">Single Year</button>
+        </div>
+
+        <div class="stat-row profile-stats" id="profileStatRow"></div>
+
+        <div id="profileTimeView">
+          <h3 class="profile-subhead">Reading achievement, 2015&ndash;2025</h3>
+          <div class="two-col-charts">
+            <div>
+              <div class="chart-mini-label">Grade 4</div>
+              <div id="profileElaChart4" style="height: 300px;"></div>
+            </div>
+            <div>
+              <div class="chart-mini-label">Grade 8</div>
+              <div id="profileElaChart8" style="height: 300px;"></div>
+            </div>
+          </div>
+          <div class="note-box">
+            <strong>2019&ndash;20 is excluded</strong> from these charts &mdash; Washington cancelled standardized
+            testing statewide that year due to COVID, so no reading achievement data exists for it at all.
+          </div>
+        </div>
+
+        <div id="profileSingleView" hidden>
+          <div class="controls">
+            <label>Year</label>
+            <input type="range" id="profileYearSlider" min="0" max="9" step="1" value="9" style="flex:1; max-width:320px;">
+            <span class="year-readout" id="profileYearReadout">2024&ndash;25</span>
+          </div>
+          <div class="three-col-charts">
+            <div id="profileFteBar" style="height: 300px;"></div>
+            <div id="profileElaBar4" style="height: 300px;"></div>
+            <div id="profileElaBar8" style="height: 300px;"></div>
+          </div>
+          <div class="note-box">
+            District bars are colored by locale tier; tier and state averages are shown in gray for comparison.
+            No reading achievement data exists for 2019&ndash;20 (COVID cancellation) &mdash; the achievement bars
+            are skipped for that year.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block page-section" id="rankings">
+      <div class="block-head">
+        <div class="eyebrow">04 &middot; Rankings</div>
+        <h2>District rankings</h2>
+        <p class="dek">Rank all 298 districts by a chosen measure, for any year on record.</p>
+      </div>
+
+      <div class="control-block">
+        <span class="control-label">Rank by</span>
+        <div class="btn-group" id="rankMetricButtons">
+          <button class="btn active" data-metric="librarian_fte" type="button">Librarian FTE</button>
+          <button class="btn" data-metric="students_per_librarian" type="button">Students per Librarian</button>
+          <button class="btn" data-metric="ela_pct_met_grade4" type="button">Grade 4 % Met ELA Standard</button>
+          <button class="btn" data-metric="ela_pct_met_grade8" type="button">Grade 8 % Met ELA Standard</button>
+          <button class="btn" data-metric="teacher_fte" type="button">Teacher FTE</button>
+          <button class="btn" data-metric="librarians_per_school" type="button">Librarians per School</button>
+        </div>
+      </div>
+
+      <div class="control-block">
+        <span class="control-label">Year</span>
+        <div class="btn-group" id="rankYearButtons"></div>
+      </div>
+
+      <div class="two-col">
+        <div class="rank-list" id="rankList"></div>
+        <div>
+          <div id="barChartTop" style="height: 340px;"></div>
+          <div id="barChartBottom" style="height: 340px; margin-top: 32px;"></div>
+          <div class="flag-note" id="bottomChartFlag" hidden></div>
+        </div>
+      </div>
+      <div class="note-box" id="rankNote"></div>
+    </section>
+
+    <section class="block page-section" id="correlation">
+      <div class="block-head">
+        <div class="eyebrow">05 &middot; Advanced Analysis</div>
+        <h2>Advanced Analysis</h2>
+        <p class="dek">Statistical views that go beyond the interactive charts elsewhere on this dashboard,
+        generated with Python (pandas, Seaborn, SciPy) &mdash; adding rigor to this project's strongest,
+        least-contestable finding: the gap in librarian access itself.</p>
+      </div>
+
+      <div class="analysis-block">
+        <h3 class="analysis-subhead">Is the Access Gap Statistically Significant?</h3>
+        <p class="dek" style="margin-bottom:14px;">A chi-square test of independence between locale tier and
+        whether a district has any librarian at all (2024&ndash;25). Unlike a test of achievement scores, this
+        tests the underlying fact this whole dashboard is built on: whether a district's locale predicts whether
+        it has a librarian in the first place.</p>
+        <div class="static-figure">
+          <img src="Assets/access_chi_square.png" alt="Stacked bar chart of districts with vs without a librarian, by locale tier, 2024-25, with chi-square test result">
+        </div>
+        <div class="figure-caption">
+          <strong>Result: &chi;&sup2; = 92.5, p &lt; 0.0001 (Large Urban excluded from the test itself &mdash;
+          only one district statewide, too few to satisfy the test's assumptions, though still shown in the chart
+          for completeness).</strong> This is an overwhelmingly significant result: locale tier and librarian
+          access are very clearly not independent. Unlike an achievement-based test, this rigorously confirms
+          the dashboard's central, most load-bearing claim rather than complicating it.
+        </div>
+      </div>
+
+      <div class="analysis-block">
+        <h3 class="analysis-subhead">Where Is Achievement Data Actually Missing?</h3>
+        <p class="dek" style="margin-bottom:14px;">DATA_NOTES.md already states that achievement-data suppression
+        (small sample sizes, &lt;10 students) is concentrated in rural districts. This heatmap shows that pattern
+        directly rather than leaving it as a sentence in a methodology file.</p>
+        <div class="static-figure">
+          <img src="Assets/missingness_heatmap.png" alt="Heatmap of percent of districts with usable Grade 4 achievement data, by locale tier and year">
+        </div>
+        <div class="figure-caption">
+          Distant Rural and Rural districts consistently have the lowest data availability of any tier, every
+          year &mdash; direct visual confirmation of the suppression pattern already disclosed elsewhere on this
+          site. <strong>While building this chart, a real data bug was found and fixed:</strong> Seattle Public
+          Schools (Washington's largest district, and the only Large Urban district) was previously missing from
+          every achievement figure on this dashboard due to a district-name mismatch in the data-cleaning
+          pipeline. It has since been corrected &mdash; see DATA_NOTES.md Section 8 for the full account.
+        </div>
+      </div>
+
+      <div class="analysis-block">
+        <h3 class="analysis-subhead">Explore the District-Level Relationship Yourself</h3>
+        <p class="dek" style="margin-bottom:14px;">Every district plotted individually, colored by locale classification.</p>
+
+      <div class="control-block">
+        <span class="control-label">Grade</span>
+        <div class="btn-group" id="gradeButtons">
+          <button class="btn" data-grade="4">Grade 4</button>
+          <button class="btn" data-grade="8">Grade 8</button>
+        </div>
+      </div>
+
+      <div class="control-block">
+        <span class="control-label">Achievement metric</span>
+        <div class="btn-group" id="metricButtons">
+          <button class="btn" data-metric="met">Met Standard (Level 3&ndash;4)</button>
+          <button class="btn" data-metric="foundational">Foundational (Level 2&ndash;4)</button>
+        </div>
+      </div>
+
+      <div class="control-block">
+        <span class="control-label">Year</span>
+        <div class="btn-group" id="yearButtons"></div>
+      </div>
+
+      <div id="scatterChart" style="height: 500px; margin-top: 28px;"></div>
+
+      <div class="tier-legend" id="tierLegend"></div>
+      <div class="corr-list" id="corrList"></div>
+
+      <div class="note-box">
+        <strong>Reading note:</strong> these are correlations across districts in a single year, not a causal test &mdash;
+        district wealth, overall staffing, and other factors are not controlled for here. Small districts with
+        suppressed achievement data (sample size &lt; 10 students) are excluded from this chart, and that
+        exclusion is concentrated in the Distant Rural tier. The &ldquo;Met Standard&rdquo; and
+        &ldquo;Foundational&rdquo; metrics use different definitions of grade-level performance and should not
+        be compared to each other directly.
+      </div>
+      </div>
+    </section>
+
+    <footer>
+      Sources: OSPI SLIDE staffing extract, NCES ELSI locale codes, and OSPI Report Card Smarter Balanced assessment
+      data, merged via clean_data.py &rarr; clean_locale.py &rarr; clean_achievement.py. See DATA_NOTES.md in this
+      repository for the full methodology log, including known data gaps and metric changes. Built with Plotly.js
+      and PapaParse.
+    </footer>
+
+  </div>
+
+<script>
+const YEARS = ["2015-16","2016-17","2017-18","2018-19","2019-20","2020-21","2021-22","2022-23","2023-24","2024-25"];
+const YEAR_LABELS = YEARS.map(y => y.replace("-", "\u2013"));
+
+let RAW = [];
+let byYear = {};
+let districts = [];
+let stateElaByYear = {}; // year -> { grade4_pct_met, grade8_pct_met }
+
+// ---- District profile state ----
+let profileDistrict = null;
+let profileView = "time";   // "time" | "single"
+let profileHighlightIdx = -1;
+let profileTierCompare = null; // null | one of TIER_ORDER, only relevant before a district is picked
+
+const fmtNum = (n, digits=0) => n === null || n === undefined || isNaN(n)
+  ? "\u2014"
+  : n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+
+let mainDataLoaded = false;
+let elaTrendLoaded = false;
+function maybeInit() {
+  if (mainDataLoaded && elaTrendLoaded) init();
+}
+
+Papa.parse("output/wa_librarians_full.csv", {
+  download: true,
+  header: true,
+  dynamicTyping: true,
+  skipEmptyLines: true,
+  complete: (res) => {
+    RAW = res.data.filter(r => r.district && r.year);
+    districts = [...new Set(RAW.map(r => r.district))].sort();
+    YEARS.forEach(y => byYear[y] = RAW.filter(r => r.year === y));
+    mainDataLoaded = true;
+    maybeInit();
+  },
+  error: (err) => {
+    document.getElementById("profileFteChart").innerHTML =
+      "<p style='color:#A23B2E; font-family: Space Mono, monospace; font-size:13px;'>Could not load output/wa_librarians_full.csv &mdash; check that this file sits in an <code>output/</code> folder next to index.html.</p>";
+    console.error(err);
+  }
+});
+
+// State-level ELA trend, used as the "statewide average" line in the district
+// profile achievement chart (enrollment-weighted state figure, rather than a
+// simple mean across districts).
+Papa.parse("output/state_ela_trend.csv", {
+  download: true,
+  header: true,
+  dynamicTyping: true,
+  skipEmptyLines: true,
+  complete: (res) => {
+    res.data.forEach(r => {
+      if (r.year) stateElaByYear[r.year] = r;
+    });
+    elaTrendLoaded = true;
+    maybeInit();
+  },
+  error: (err) => {
+    // Non-fatal: the profile section falls back to a district-mean state
+    // average if this file can't be found.
+    elaTrendLoaded = true;
+    maybeInit();
+    console.error("Could not load output/state_ela_trend.csv", err);
+  }
+});
+
+function init() {
+  renderStatCards();
+  renderStatewideTrendChart();
+  renderAccessGapChart();
+  renderAchievementGapChart();
+  initRankingsSection();
+
+  initScatterSection();
+  initDistrictProfile();
+  initTierCompareButtons();
+  renderProfileFteChart(); // statewide-only default, before any district is searched
+  initPageNav();
+}
+
+// ---- Nav scroll-spy ----
+function initPageNav() {
+  const navItems = document.querySelectorAll(".nav-link");
+
+  navItems.forEach(item => {
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      showPage(item.dataset.target);
+    });
+  });
+}
+
+function showPage(targetId) {
+  document.querySelectorAll(".page-section").forEach(section => {
+    section.classList.toggle("active", section.id === targetId);
+  });
+  document.querySelectorAll(".nav-link").forEach(link => {
+    link.classList.toggle("active", link.dataset.target === targetId);
+  });
+
+  window.scrollTo(0, 0);
+
+  // Charts on non-default pages were drawn by Plotly while their
+  // container was hidden (display:none), which usually gives them a
+  // width of 0. Resizing them now that the page is actually visible
+  // fixes that without needing to re-render every chart from scratch.
+  const activeSection = document.getElementById(targetId);
+  if (activeSection) {
+    activeSection.querySelectorAll(".js-plotly-plot").forEach(div => {
+      try { Plotly.Plots.resize(div); } catch (err) { /* chart not ready yet -- ignore */ }
+    });
+  }
+}
+
+// ---- Stat cards ----
+function renderStatCards() {
+  const first = byYear[YEARS[0]];
+  const last = byYear[YEARS[YEARS.length - 1]];
+
+  const totalFirst = first.reduce((s, r) => s + (r.librarian_fte || 0), 0);
+  const totalLast = last.reduce((s, r) => s + (r.librarian_fte || 0), 0);
+  const pctChange = ((totalLast - totalFirst) / totalFirst) * 100;
+
+  document.getElementById("statTotalNow").textContent = fmtNum(totalLast, 1);
+  document.getElementById("statChange").textContent =
+    (pctChange >= 0 ? "+" : "") + fmtNum(pctChange, 0) + "%";
+  document.getElementById("statChangeSub").textContent =
+    `Full-time librarian positions statewide, 2015\u201316 to 2024\u201325`;
+
+  const zeroCount = last.filter(r => (r.librarian_fte || 0) === 0).length;
+  const zeroPct = (zeroCount / last.length) * 100;
+  document.getElementById("statZeroPct").textContent = fmtNum(zeroPct, 0) + "%";
+  document.getElementById("statZeroSub").textContent = `${zeroCount} of ${last.length} districts, 2024\u201325`;
+
+  const ratios = last.map(r => r.students_per_librarian).filter(v => v !== null && v !== undefined && !isNaN(v));
+  ratios.sort((a,b) => a-b);
+  const median = ratios.length ? ratios[Math.floor(ratios.length/2)] : null;
+  document.getElementById("statRatio").textContent = median ? fmtNum(median,0) + ":1" : "\u2014";
+}
+
+// ---- Statewide ELA achievement vs. librarian staffing, over time ----
+function renderStatewideTrendChart() {
+  // 2019-20 is deliberately excluded from this chart (not just left blank):
+  // no standardized test data exists for that year at all (COVID
+  // cancellation), so including it would draw a misleading gap in the
+  // line rather than a clean, continuous trend across the years that
+  // actually have data.
+  const chartYears = YEARS.filter(y => y !== "2019-20");
+  const chartYearLabels = chartYears.map(y => y.replace("-", "\u2013"));
+  const totalFteByYear = chartYears.map(y => byYear[y].reduce((s, r) => s + (r.librarian_fte || 0), 0));
+  const grade4 = chartYears.map(y => stateElaByYear[y] ? stateElaByYear[y].grade4_pct_met : null);
+  const grade8 = chartYears.map(y => stateElaByYear[y] ? stateElaByYear[y].grade8_pct_met : null);
+
+  const fteChangePct = ((totalFteByYear[totalFteByYear.length - 1] - totalFteByYear[0]) / totalFteByYear[0]) * 100;
+  const badgeEl = document.getElementById("statewideBadge");
+  if (badgeEl) {
+    badgeEl.textContent = (fteChangePct >= 0 ? "\u25B2 +" : "\u25BC ") + fmtNum(fteChangePct, 0) + "% FTE";
+    badgeEl.className = "dashboard-card-badge " + (fteChangePct < 0 ? "down" : "up");
+  }
+
+  const traces = [
+    {
+      x: chartYearLabels, y: grade4, name: "Grade 4 % Met Standard",
+      mode: "lines+markers", yaxis: "y",
+      line: { color: "#1D3454", width: 2.5 }, marker: { size: 6 },
+      hovertemplate: "%{x}<br>Grade 4: %{y:.1f}%<extra></extra>"
+    },
+    {
+      x: chartYearLabels, y: grade8, name: "Grade 8 % Met Standard",
+      mode: "lines+markers", yaxis: "y",
+      line: { color: "#BB7E3D", width: 2.5 }, marker: { size: 6 },
+      hovertemplate: "%{x}<br>Grade 8: %{y:.1f}%<extra></extra>"
+    },
+    {
+      x: chartYearLabels, y: totalFteByYear, name: "Statewide Librarian FTE",
+      mode: "lines+markers", yaxis: "y2",
+      line: { color: "#A23B2E", width: 2, dash: "dash" }, marker: { size: 5 },
+      hovertemplate: "%{x}<br>Librarian FTE: %{y:.0f}<extra></extra>"
+    }
+  ];
+
+  Plotly.newPlot("statewideChart", traces, {
+    margin: { t: 10, r: 60, l: 50, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 },
+    xaxis: { gridcolor: "#E5E5E0", fixedrange: true },
+    yaxis: { title: "% Met Standard", gridcolor: "#E5E5E0", zeroline: false, fixedrange: true },
+    yaxis2: {
+      title: "Statewide Librarian FTE", overlaying: "y", side: "right",
+      gridcolor: "transparent", zeroline: false, fixedrange: true
+    },
+    legend: { orientation: "h", y: -0.2 },
+    hovermode: "x unified",
+    dragmode: false
+  }, { staticPlot: false, displayModeBar: false, responsive: true });
+}
+
+// ---- Tier-level snapshot helper (shared by the two gap charts below) ----
+function tierSnapshot(year, achievementField) {
+  const rows = (byYear[year] || []).filter(r => r.locale_tier);
+  return TIER_ORDER.map(tier => {
+    const tierRows = rows.filter(r => r.locale_tier === tier);
+    const n = tierRows.length;
+    const zeroCount = tierRows.filter(r => (r.librarian_fte || 0) === 0).length;
+    const pctZero = n ? (zeroCount / n) * 100 : null;
+    const achRows = tierRows.filter(r => isNum(r[achievementField]));
+    const avgAch = achRows.length ? achRows.reduce((s, r) => s + r[achievementField], 0) / achRows.length : null;
+    return { tier, n, pctZero, avgAch };
+  });
+}
+
+// ---- Access Gap by Locale Tier ----
+function renderAccessGapChart() {
+  const stats = tierSnapshot("2024-25", "ela_pct_met_grade4");
+
+  Plotly.newPlot("accessGapChart", [{
+    type: "bar",
+    x: stats.map(s => s.tier),
+    y: stats.map(s => s.pctZero),
+    marker: { color: stats.map(s => TIER_COLORS[s.tier]) },
+    text: stats.map(s => s.pctZero !== null ? `${fmtNum(s.pctZero, 0)}%` : "n/a"),
+    textposition: "outside",
+    hovertemplate: "%{x}<br>%{y:.0f}%% of districts have zero librarian FTE<extra></extra>"
+  }], {
+    margin: { t: 10, r: 10, l: 45, b: 60 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 11.5 },
+    yaxis: { title: "% with zero librarian FTE", gridcolor: "#E5E5E0", range: [0, 100], fixedrange: true },
+    xaxis: { fixedrange: true },
+    dragmode: false
+  }, { displayModeBar: false, responsive: true });
+
+  const distantRural = stats.find(s => s.tier === "Distant Rural");
+  const largeUrban = stats.find(s => s.tier === "Large Urban");
+  const badgeEl = document.getElementById("accessGapBadge");
+  if (badgeEl && distantRural && largeUrban) {
+    badgeEl.textContent = `${fmtNum(distantRural.pctZero, 0)}% vs ${fmtNum(largeUrban.pctZero, 0)}%`;
+  }
+}
+
+// ---- Achievement Gap by Locale Tier ----
+function renderAchievementGapChart() {
+  const stats = tierSnapshot("2024-25", "ela_pct_met_grade4");
+
+  Plotly.newPlot("achievementGapChart", [{
+    type: "bar",
+    x: stats.map(s => s.tier),
+    y: stats.map(s => s.avgAch),
+    marker: { color: stats.map(s => TIER_COLORS[s.tier]) },
+    text: stats.map(s => s.avgAch !== null ? `${fmtNum(s.avgAch, 1)}%` : "n/a"),
+    textposition: "outside",
+    hovertemplate: "%{x}<br>Avg Grade 4 met standard: %{y:.1f}%<extra></extra>"
+  }], {
+    margin: { t: 10, r: 10, l: 45, b: 60 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 11.5 },
+    yaxis: { title: "Avg % Met Standard (Grade 4)", gridcolor: "#E5E5E0", fixedrange: true },
+    xaxis: { fixedrange: true },
+    dragmode: false
+  }, { displayModeBar: false, responsive: true });
+
+  const withAch = stats.filter(s => s.avgAch !== null).sort((a, b) => a.avgAch - b.avgAch);
+  const badgeEl = document.getElementById("achievementGapBadge");
+  if (badgeEl && withAch.length) {
+    const lowest = withAch[0];
+    const highest = withAch[withAch.length - 1];
+    badgeEl.textContent = `${fmtNum(lowest.avgAch, 0)}% vs ${fmtNum(highest.avgAch, 0)}%`;
+  }
+}
+
+// ============================================================
+// Rankings: pick a metric + year, rank all 298 districts
+// ============================================================
+
+const RANK_METRICS = {
+  librarian_fte: {
+    label: "Librarian FTE", field: "librarian_fte",
+    format: v => fmtNum(v, 1), axisTitle: "Librarian FTE",
+    needsAchievement: false
+  },
+  students_per_librarian: {
+    label: "Students per Librarian", field: "students_per_librarian",
+    format: v => fmtNum(v, 0) + ":1", axisTitle: "Students per librarian FTE",
+    needsAchievement: false,
+    note: "Shown in place of \u201cFTE per student,\u201d since the underlying staffing data doesn't include raw enrollment counts \u2014 this ratio carries the same information, inverted. Districts with zero librarian FTE are excluded here, since the ratio is undefined when there's no librarian to divide by."
+  },
+  ela_pct_met_grade4: {
+    label: "Grade 4 % Met ELA Standard", field: "ela_pct_met_grade4",
+    format: v => fmtNum(v, 1) + "%", axisTitle: "% Met Standard (Grade 4)",
+    needsAchievement: true
+  },
+  ela_pct_met_grade8: {
+    label: "Grade 8 % Met ELA Standard", field: "ela_pct_met_grade8",
+    format: v => fmtNum(v, 1) + "%", axisTitle: "% Met Standard (Grade 8)",
+    needsAchievement: true
+  },
+  teacher_fte: {
+    label: "Teacher FTE", field: "teacher_fte",
+    format: v => fmtNum(v, 1), axisTitle: "Teacher FTE",
+    needsAchievement: false,
+    note: "Included for context: overall certificated teacher staffing, to compare against librarian-specific staffing above."
+  },
+  librarians_per_school: {
+    label: "Librarians per School", field: "librarians_per_school",
+    format: v => fmtNum(v, 2), axisTitle: "Librarians per school",
+    needsAchievement: false,
+    note: "A district can have librarian FTE spread thin across many school buildings \u2014 this measures coverage per building rather than a raw district-wide total."
+  }
+};
+
+const rankState = { metric: "librarian_fte", year: "2024-25" };
+
+function initRankingsSection() {
+  document.querySelectorAll("#rankMetricButtons .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      rankState.metric = btn.dataset.metric;
+      const needsAch = RANK_METRICS[rankState.metric].needsAchievement;
+      if (needsAch && rankState.year === "2019-20") rankState.year = "2024-25";
+      refreshRankingsControls();
+    });
+  });
+
+  const yearButtonsEl = document.getElementById("rankYearButtons");
+  YEARS.forEach((y, i) => {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.dataset.year = y;
+    btn.textContent = YEAR_LABELS[i];
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      if (btn.classList.contains("disabled")) return;
+      rankState.year = y;
+      refreshRankingsControls();
+    });
+    yearButtonsEl.appendChild(btn);
+  });
+
+  refreshRankingsControls();
+}
+
+function refreshRankingsControls() {
+  document.querySelectorAll("#rankMetricButtons .btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.metric === rankState.metric);
+  });
+
+  const needsAch = RANK_METRICS[rankState.metric].needsAchievement;
+  document.querySelectorAll("#rankYearButtons .btn").forEach(btn => {
+    const disabled = needsAch && btn.dataset.year === "2019-20";
+    btn.classList.toggle("disabled", disabled);
+    btn.classList.toggle("active", btn.dataset.year === rankState.year && !disabled);
+    btn.title = disabled ? "No standardized test data for 2019\u201320 (COVID cancellation)" : "";
+  });
+
+  renderRankings();
+}
+
+function renderRankings() {
+  const metric = RANK_METRICS[rankState.metric];
+  const field = metric.field;
+  const yearLabel = YEAR_LABELS[YEARS.indexOf(rankState.year)];
+  const allRows = byYear[rankState.year] || [];
+  const rows = allRows.filter(r => isNum(r[field]));
+
+  // Sorted highest-to-lowest by raw value. Note: for "Students per
+  // Librarian," a HIGHER number is the less-favorable outcome (more
+  // students sharing one librarian), the opposite of every other metric
+  // here -- so charts are labeled "Highest 15" / "Lowest 15" by value,
+  // not "best" / "worst," to avoid implying the wrong direction.
+  const sorted = [...rows].sort((a, b) => b[field] - a[field]);
+
+  const listEl = document.getElementById("rankList");
+  listEl.innerHTML = "";
+  sorted.forEach((r, i) => {
+    const div = document.createElement("div");
+    div.className = "rank-row";
+    div.innerHTML = `
+      <span class="rank-num">${i + 1}</span>
+      <span class="rank-name">${r.district.replace(" School District (WA)", "")}</span>
+      <span class="rank-change flat">${metric.format(r[field])}</span>
+    `;
+    listEl.appendChild(div);
+  });
+
+  const top15 = sorted.slice(0, 15);
+
+  // Librarian FTE bottom chart: excludes districts reporting zero FTE,
+  // since a majority of WA districts report zero -- without excluding
+  // them, this chart would just be 15 more zeroes rather than a
+  // meaningful "lowest, but nonzero" comparison.
+  const excludeZero = rankState.metric === "librarian_fte";
+  const bottomPool = excludeZero ? sorted.filter(r => r[field] > 0) : sorted;
+  const bottom15 = bottomPool.slice(-15);
+
+  plotRankChart("barChartTop", top15, metric, "Highest 15", yearLabel);
+  plotRankChart("barChartBottom", bottom15, metric, "Lowest 15", yearLabel);
+
+  const flagEl = document.getElementById("bottomChartFlag");
+  if (excludeZero) {
+    const zeroCount = sorted.length - bottomPool.length;
+    flagEl.innerHTML = `&#9888; This chart shows only the bottom 15 among districts reporting <strong>more than zero</strong> librarian FTE. ${zeroCount} districts reporting zero librarians are excluded here &mdash; see the &ldquo;Districts With Zero Librarians&rdquo; figure in Section 01 for that count.`;
+    flagEl.hidden = false;
+  } else {
+    flagEl.hidden = true;
+  }
+
+  const excluded = allRows.length - rows.length;
+  const noteParts = [`Showing ${rows.length} of ${allRows.length} districts with usable data for this metric/year`];
+  if (excluded > 0) noteParts.push(`(${excluded} excluded: no data for this metric in this year)`);
+  if (metric.note) noteParts.push(metric.note);
+  document.getElementById("rankNote").innerHTML = noteParts.join(" &mdash; ") + ".";
+}
+
+function plotRankChart(divId, rowsForChart, metric, titlePrefix, yearLabel) {
+  // Ascending order so the highest value in this subset lands at the
+  // top of the chart (Plotly draws the first array item at the bottom).
+  const ordered = [...rowsForChart].sort((a, b) => a[metric.field] - b[metric.field]);
+
+  Plotly.newPlot(divId, [{
+    type: "bar",
+    orientation: "h",
+    x: ordered.map(r => r[metric.field]),
+    y: ordered.map(r => r.district.replace(" School District (WA)", "")),
+    marker: { color: "#1D3454" },
+    hovertemplate: "%{y}<br>" + metric.axisTitle + ": %{x}<extra></extra>"
+  }], {
+    title: { text: `${titlePrefix}: ${metric.label} \u2014 ${yearLabel}`, font: { size: 13, family: "Plus Jakarta Sans" } },
+    margin: { t: 40, r: 20, l: 190, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 11 },
+    xaxis: { title: metric.axisTitle, gridcolor: "#E5E5E0", zeroline: true, zerolinecolor: "#D3D1C8" },
+    yaxis: { automargin: true }
+  }, { displayModeBar: false, responsive: true });
+}
+
+// ============================================================
+// Correlation scatter section
+// ============================================================
+
+// Warm-to-cool ramp: rural tiers are warm earth tones, urban tiers are
+// cool blues, so color temperature itself encodes the rural-urban axis.
+const TIER_ORDER = ["Distant Rural", "Rural", "Mid-size", "Suburban", "Urban", "Large Urban"];
+const TIER_COLORS = {
+  "Distant Rural": "#8C2F26",
+  "Rural": "#BB7E3D",
+  "Mid-size": "#8A7B4E",
+  "Suburban": "#4C7A5A",
+  "Urban": "#2C5170",
+  "Large Urban": "#1D3454",
+};
+
+const FOUNDATIONAL_YEARS = ["2023-24", "2024-25"];
+
+const scatterState = { grade: 4, metric: "met", year: "2024-25" };
+
+function scatterField() {
+  return `ela_pct_${scatterState.metric}_grade${scatterState.grade}`;
+}
+
+function isNum(v) {
+  return v !== null && v !== undefined && v !== "" && !isNaN(v);
+}
+
+function yearHasData(year) {
+  const field = scatterField();
+  const rows = byYear[year] || [];
+  return rows.some(r => isNum(r[field]) && r.locale_tier);
+}
+
+function pearson(xs, ys) {
+  const n = xs.length;
+  if (n < 3) return null;
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, denomX = 0, denomY = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - meanX, dy = ys[i] - meanY;
+    num += dx * dy;
+    denomX += dx * dx;
+    denomY += dy * dy;
+  }
+  const denom = Math.sqrt(denomX * denomY);
+  return denom === 0 ? null : num / denom;
+}
+
+function linRegLine(xs, ys) {
+  const n = xs.length;
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, denom = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (ys[i] - meanY);
+    denom += (xs[i] - meanX) ** 2;
+  }
+  const slope = denom === 0 ? 0 : num / denom;
+  const intercept = meanY - slope * meanX;
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  return {
+    x: [minX, maxX],
+    y: [minX * slope + intercept, maxX * slope + intercept],
+  };
+}
+
+function initScatterSection() {
+  document.querySelectorAll("#gradeButtons .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      scatterState.grade = parseInt(btn.dataset.grade, 10);
+      refreshScatterControls();
+    });
+  });
+
+  document.querySelectorAll("#metricButtons .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      scatterState.metric = btn.dataset.metric;
+      if (scatterState.metric === "foundational" && !FOUNDATIONAL_YEARS.includes(scatterState.year)) {
+        scatterState.year = FOUNDATIONAL_YEARS[FOUNDATIONAL_YEARS.length - 1];
+      }
+      refreshScatterControls();
+    });
+  });
+
+  const yearButtonsEl = document.getElementById("yearButtons");
+  YEARS.forEach((y, i) => {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.dataset.year = y;
+    btn.textContent = YEAR_LABELS[i];
+    btn.addEventListener("click", () => {
+      if (btn.classList.contains("disabled")) return;
+      scatterState.year = y;
+      refreshScatterControls();
+    });
+    yearButtonsEl.appendChild(btn);
+  });
+
+  renderTierLegend();
+  refreshScatterControls();
+}
+
+function renderTierLegend() {
+  const el = document.getElementById("tierLegend");
+  el.innerHTML = TIER_ORDER.map(tier =>
+    `<span><span class="swatch" style="background:${TIER_COLORS[tier]}"></span>${tier}</span>`
+  ).join("");
+}
+
+function refreshScatterControls() {
+  document.querySelectorAll("#gradeButtons .btn").forEach(btn => {
+    btn.classList.toggle("active", parseInt(btn.dataset.grade, 10) === scatterState.grade);
+  });
+
+  document.querySelectorAll("#metricButtons .btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.metric === scatterState.metric);
+  });
+
+  document.querySelectorAll("#yearButtons .btn").forEach(btn => {
+    const y = btn.dataset.year;
+    const disabled = scatterState.metric === "foundational"
+      ? !FOUNDATIONAL_YEARS.includes(y)
+      : !yearHasData(y);
+    btn.classList.toggle("disabled", disabled);
+    btn.classList.toggle("active", y === scatterState.year && !disabled);
+    btn.title = disabled ? "No data available for this metric/grade in this year" : "";
+  });
+
+  renderScatter();
+}
+
+function renderScatter() {
+  const field = scatterField();
+  const rows = (byYear[scatterState.year] || []).filter(r => isNum(r[field]) && r.locale_tier);
+
+  const traces = TIER_ORDER.map(tier => {
+    const tierRows = rows.filter(r => r.locale_tier === tier);
+    return {
+      x: tierRows.map(r => r.librarian_fte),
+      y: tierRows.map(r => r[field]),
+      text: tierRows.map(r => r.district.replace(" School District (WA)", "")),
+      mode: "markers",
+      type: "scatter",
+      name: tier,
+      marker: { color: TIER_COLORS[tier], size: 8, opacity: 0.85, line: { width: 0.5, color: "#1A1A1A" } },
+      hovertemplate: "%{text}<br>Librarian FTE: %{x}<br>" +
+        (scatterState.metric === "met" ? "Met Standard" : "Foundational") + ": %{y:.1f}%<extra>" + tier + "</extra>"
+    };
+  });
+
+  TIER_ORDER.forEach(tier => {
+    const tierRows = rows.filter(r => r.locale_tier === tier);
+    if (tierRows.length >= 3) {
+      const xs = tierRows.map(r => r.librarian_fte);
+      const ys = tierRows.map(r => r[field]);
+      const line = linRegLine(xs, ys);
+      traces.push({
+        x: line.x,
+        y: line.y,
+        mode: "lines",
+        type: "scatter",
+        showlegend: false,
+        line: { color: TIER_COLORS[tier], width: 1.5, dash: "dot" },
+        hoverinfo: "skip"
+      });
+    }
+  });
+
+  const metricLabel = scatterState.metric === "met" ? "% Met Standard (Level 3\u20134)" : "% Foundational (Level 2\u20134)";
+
+  Plotly.newPlot("scatterChart", traces, {
+    margin: { t: 10, r: 20, l: 55, b: 45 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 },
+    xaxis: { title: "Librarian FTE", gridcolor: "#E5E5E0", zeroline: false },
+    yaxis: { title: metricLabel, gridcolor: "#E5E5E0", zeroline: false },
+    legend: { orientation: "h", y: -0.18 },
+    hovermode: "closest"
+  }, { displayModeBar: false, responsive: true });
+
+  renderCorrList(rows, field);
+}
+
+function renderCorrList(rows, field) {
+  const el = document.getElementById("corrList");
+  const lines = TIER_ORDER.map(tier => {
+    const tierRows = rows.filter(r => r.locale_tier === tier);
+    const xs = tierRows.map(r => r.librarian_fte);
+    const ys = tierRows.map(r => r[field]);
+    const r = pearson(xs, ys);
+    const rLabel = r === null ? "n/a (too few districts)" : r.toFixed(2);
+    return `<strong>${tier}</strong>: r = ${rLabel} &nbsp;(n = ${tierRows.length} districts)`;
+  });
+  el.innerHTML = lines.join("<br>");
+}
+
+// ============================================================
+// District profile ("Look up your district")
+// ============================================================
+
+function districtDisplayName(d) {
+  return d.replace(" School District (WA)", "");
+}
+
+function avgField(rows, field) {
+  const vals = rows.map(r => r[field]).filter(v => isNum(v));
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function districtRowForYear(d, year) {
+  return (byYear[year] || []).find(r => r.district === d) || null;
+}
+
+// ============================================================
+// Library Staffing Grade ("District Report Card" letter grade)
+//
+// METHODOLOGY (kept in sync with DATA_NOTES.md -- update both if this
+// changes):
+//   - Grades reflect LIBRARIAN STAFFING ONLY, not reading achievement,
+//     funding, or general school quality. Blending in achievement data
+//     would imply a causal claim ("this district is bad because test
+//     scores are low") that this project's data cannot support -- there
+//     is no poverty/income control in this analysis (see DATA_NOTES.md
+//     Section 5).
+//   - A district reporting ZERO librarian FTE receives an automatic F,
+//     regardless of any other factor.
+//   - Districts with a librarian are scored on three PERCENTILE RANKS
+//     relative to all other Washington districts that also have a
+//     librarian, in the most recent year (2024-25):
+//       50% - Students per librarian (lower is better)
+//       30% - Librarians per school, i.e. building-level coverage (higher is better)
+//       20% - 10-year staffing trend, 2015-16 to 2024-25 (higher/less negative is better)
+//   - This is a RELATIVE (percentile) grade, not a grade against an
+//     external/national standard -- meaning grade bands are stable
+//     relative to peers even in a year where every district's staffing
+//     changed. This is a real limitation, disclosed on the page itself.
+//   - Composite score >= 80 -> A, >= 60 -> B, >= 40 -> C, else D
+//     (F is reserved specifically for zero-FTE districts, see above).
+// ============================================================
+
+const GRADE_YEAR = "2024-25";
+const GRADE_BASE_YEAR = "2015-16";
+
+function districtFteTrendPct(d) {
+  const first = districtRowForYear(d, GRADE_BASE_YEAR);
+  const last = districtRowForYear(d, GRADE_YEAR);
+  if (!first || !last) return null;
+  const f = first.librarian_fte || 0;
+  const l = last.librarian_fte || 0;
+  if (f === 0) return null; // can't compute a meaningful % change from a zero baseline
+  return ((l - f) / f) * 100;
+}
+
+function percentileRank(value, peerValues, higherIsBetter) {
+  if (!isNum(value)) return null;
+  const valid = peerValues.filter(isNum);
+  if (!valid.length) return null;
+  const betterOrEqualCount = valid.filter(v => higherIsBetter ? value >= v : value <= v).length;
+  return (betterOrEqualCount / valid.length) * 100;
+}
+
+function computeDistrictGrade(d) {
+  const row = districtRowForYear(d, GRADE_YEAR);
+  if (!row) return null;
+
+  if (!row.librarian_fte || row.librarian_fte === 0) {
+    return { letter: "F", composite: 0, zeroFte: true };
+  }
+
+  const allRows = byYear[GRADE_YEAR] || [];
+  const peers = allRows.filter(r => r.librarian_fte > 0);
+
+  const ratioPeers = peers.map(r => r.students_per_librarian);
+  const coveragePeers = peers.map(r => r.librarians_per_school);
+  const trendPeers = peers.map(r => districtFteTrendPct(r.district));
+
+  const ratioPct = percentileRank(row.students_per_librarian, ratioPeers, false);
+  const coveragePct = percentileRank(row.librarians_per_school, coveragePeers, true);
+  const trendPct = percentileRank(districtFteTrendPct(d), trendPeers, true);
+
+  const parts = [];
+  if (ratioPct !== null) parts.push([ratioPct, 0.5]);
+  if (coveragePct !== null) parts.push([coveragePct, 0.3]);
+  if (trendPct !== null) parts.push([trendPct, 0.2]);
+
+  if (!parts.length) return { letter: "N/A", composite: null };
+
+  const totalWeight = parts.reduce((s, [, w]) => s + w, 0);
+  const composite = parts.reduce((s, [p, w]) => s + p * w, 0) / totalWeight;
+
+  let letter;
+  if (composite >= 80) letter = "A";
+  else if (composite >= 60) letter = "B";
+  else if (composite >= 40) letter = "C";
+  else letter = "D";
+
+  return { letter, composite, ratioPct, coveragePct, trendPct, zeroFte: false };
+}
+
+function renderDistrictGrade(d) {
+  const grade = computeDistrictGrade(d);
+  const badgeEl = document.getElementById("gradeBadgeEl");
+  if (!grade) {
+    badgeEl.textContent = "\u2014";
+    badgeEl.className = "grade-badge";
+    return;
+  }
+  badgeEl.textContent = grade.letter;
+  badgeEl.className = "grade-badge grade-" + grade.letter.charAt(0);
+}
+
+function initTierCompareButtons() {
+  document.querySelectorAll("#tierCompareButtons .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tier = btn.dataset.tier;
+      profileTierCompare = (profileTierCompare === tier) ? null : tier;
+      document.querySelectorAll("#tierCompareButtons .btn").forEach(b =>
+        b.classList.toggle("active", b.dataset.tier === profileTierCompare)
+      );
+      document.getElementById("profileEmptyState").textContent = profileTierCompare
+        ? `Showing the statewide average compared to ${profileTierCompare}. Search above to add your district instead.`
+        : "Showing the statewide average. Select a locale tier above to compare it, or search above to add your district.";
+      renderProfileFteChart();
+    });
+  });
+}
+
+function initDistrictProfile() {
+  const searchInput = document.getElementById("districtSearch");
+  const resultsEl = document.getElementById("profileSearchResults");
+
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim().toLowerCase();
+    profileHighlightIdx = -1;
+    if (!q) {
+      resultsEl.classList.remove("open");
+      resultsEl.innerHTML = "";
+      searchInput.setAttribute("aria-expanded", "false");
+      return;
+    }
+    const matches = districts.filter(d => districtDisplayName(d).toLowerCase().includes(q)).slice(0, 12);
+    renderSearchResults(matches);
+  });
+
+  searchInput.addEventListener("keydown", (e) => {
+    const items = resultsEl.querySelectorAll(".profile-search-result");
+    if (!items.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      profileHighlightIdx = Math.min(profileHighlightIdx + 1, items.length - 1);
+      updateHighlight(items);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      profileHighlightIdx = Math.max(profileHighlightIdx - 1, 0);
+      updateHighlight(items);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (profileHighlightIdx >= 0 && items[profileHighlightIdx]) items[profileHighlightIdx].click();
+    } else if (e.key === "Escape") {
+      resultsEl.classList.remove("open");
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".profile-search-wrap")) resultsEl.classList.remove("open");
+  });
+
+  document.querySelectorAll("#profileViewToggle .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      profileView = btn.dataset.view;
+      document.querySelectorAll("#profileViewToggle .btn").forEach(b => b.classList.toggle("active", b === btn));
+      document.getElementById("profileTimeView").hidden = profileView !== "time";
+      document.getElementById("profileSingleView").hidden = profileView !== "single";
+      if (profileDistrict) renderProfileView();
+    });
+  });
+
+  document.getElementById("profileYearSlider").addEventListener("input", (e) => {
+    const yearIdx = parseInt(e.target.value, 10);
+    document.getElementById("profileYearReadout").textContent = YEAR_LABELS[yearIdx];
+    if (profileDistrict) renderProfileSingleView(yearIdx);
+  });
+}
+
+function updateHighlight(items) {
+  items.forEach((el, i) => el.classList.toggle("highlighted", i === profileHighlightIdx));
+}
+
+function renderSearchResults(matches) {
+  const resultsEl = document.getElementById("profileSearchResults");
+  const searchInput = document.getElementById("districtSearch");
+  if (!matches.length) {
+    resultsEl.innerHTML = `<div class="profile-search-empty">No districts match that search.</div>`;
+    resultsEl.classList.add("open");
+    searchInput.setAttribute("aria-expanded", "true");
+    return;
+  }
+  resultsEl.innerHTML = matches.map(d => {
+    const latestRow = districtRowForYear(d, YEARS[YEARS.length - 1]);
+    const tier = latestRow ? latestRow.locale_tier : "";
+    return `<div class="profile-search-result" data-district="${encodeURIComponent(d)}" role="option">${districtDisplayName(d)}${tier ? `<span class="tier-tag">${tier}</span>` : ""}</div>`;
+  }).join("");
+  resultsEl.classList.add("open");
+  searchInput.setAttribute("aria-expanded", "true");
+  resultsEl.querySelectorAll(".profile-search-result").forEach(el => {
+    el.addEventListener("click", () => {
+      const d = decodeURIComponent(el.dataset.district);
+      selectProfileDistrict(d);
+      resultsEl.classList.remove("open");
+      searchInput.value = districtDisplayName(d);
+    });
+  });
+}
+
+function selectProfileDistrict(d) {
+  profileDistrict = d;
+  document.getElementById("profileEmptyState").hidden = true;
+  document.getElementById("tierCompareBlock").hidden = true;
+  document.getElementById("profileHeader").hidden = false;
+  document.getElementById("profileContent").hidden = false;
+  document.getElementById("profileDistrictName").textContent = districtDisplayName(d);
+
+  const latestRow = districtRowForYear(d, YEARS[YEARS.length - 1]);
+  const tier = latestRow ? latestRow.locale_tier : null;
+  const badge = document.getElementById("profileTierBadge");
+  badge.innerHTML = tier
+    ? `<span class="swatch" style="background:${TIER_COLORS[tier] || '#8A8678'}"></span>${tier}`
+    : "";
+
+  renderProfileStats();
+  renderProfileFteChart();
+  renderProfileView();
+  renderDistrictGrade(d);
+}
+
+function renderProfileView() {
+  if (profileView === "time") {
+    renderProfileElaChart(4, "profileElaChart4");
+    renderProfileElaChart(8, "profileElaChart8");
+  } else {
+    const yearIdx = parseInt(document.getElementById("profileYearSlider").value, 10);
+    renderProfileSingleView(yearIdx);
+  }
+}
+
+function currentProfileTier() {
+  const row = districtRowForYear(profileDistrict, YEARS[YEARS.length - 1])
+    || districtRowForYear(profileDistrict, YEARS[0]);
+  return row ? row.locale_tier : null;
+}
+
+function renderProfileStats() {
+  const year = YEARS[YEARS.length - 1];
+  const row = districtRowForYear(profileDistrict, year);
+  const el = document.getElementById("profileStatRow");
+  if (!row) { el.innerHTML = ""; return; }
+
+  const hasLibrarian = (row.librarian_fte || 0) > 0;
+  const stats = [
+    { label: "Librarian FTE", value: fmtNum(row.librarian_fte, 1), sub: YEAR_LABELS[YEARS.length - 1] },
+    { label: "Students / Librarian", value: hasLibrarian && isNum(row.students_per_librarian) ? fmtNum(row.students_per_librarian, 0) + ":1" : "No librarian", sub: "" },
+    { label: "Locale Tier", value: row.locale_tier || "\u2014", sub: "" },
+    { label: "Grade 4 Met Standard", value: isNum(row.ela_pct_met_grade4) ? fmtNum(row.ela_pct_met_grade4, 1) + "%" : "\u2014", sub: "" },
+    { label: "Grade 8 Met Standard", value: isNum(row.ela_pct_met_grade8) ? fmtNum(row.ela_pct_met_grade8, 1) + "%" : "\u2014", sub: "" },
+  ];
+
+  el.innerHTML = stats.map((s, i) => `
+    <div class="stat${i > 0 ? ' support' : ''}">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-number">${s.value}</div>
+      ${s.sub ? `<div class="stat-sub">${s.sub}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+// ---- FTE chart: statewide by default, adds district + tier average once one is searched ----
+function renderProfileFteChart() {
+  const stateAvgSeries = YEARS.map(y => avgField(byYear[y] || [], "librarian_fte"));
+
+  const traces = [];
+
+  if (profileDistrict) {
+    const tier = currentProfileTier();
+    const tierColor = TIER_COLORS[tier] || "#8A8678";
+    const name = districtDisplayName(profileDistrict);
+    const districtSeries = YEARS.map(y => {
+      const r = districtRowForYear(profileDistrict, y);
+      return r ? r.librarian_fte : null;
+    });
+    const tierAvgSeries = YEARS.map(y => avgField((byYear[y] || []).filter(r => r.locale_tier === tier), "librarian_fte"));
+
+    traces.push({
+      x: YEAR_LABELS, y: districtSeries, mode: "lines+markers", name: name,
+      line: { color: tierColor, width: 3 }, marker: { size: 6 },
+      hovertemplate: "%{x}<br>FTE: %{y}<extra>" + name + "</extra>"
+    });
+    traces.push({
+      x: YEAR_LABELS, y: tierAvgSeries, mode: "lines", name: (tier || "Tier") + " average",
+      line: { color: "#8A8678", width: 2, dash: "dash" },
+      hovertemplate: "%{x}<br>Tier avg FTE: %{y:.2f}<extra></extra>"
+    });
+    traces.push({
+      x: YEAR_LABELS, y: stateAvgSeries, mode: "lines", name: "Statewide average",
+      line: { color: "#1A1A1A", width: 1.5, dash: "dot" },
+      hovertemplate: "%{x}<br>State avg FTE: %{y:.2f}<extra></extra>"
+    });
+  } else {
+    // Default state: nothing searched yet. Show only the statewide trend,
+    // unless the user has clicked one of the tier-compare buttons, in
+    // which case add that single tier's average alongside it.
+    traces.push({
+      x: YEAR_LABELS, y: stateAvgSeries, mode: "lines+markers", name: "Statewide average",
+      line: { color: "#1A1A1A", width: 3 }, marker: { size: 6 },
+      hovertemplate: "%{x}<br>Avg FTE per district: %{y:.2f}<extra>Statewide</extra>"
+    });
+    if (profileTierCompare) {
+      const tierAvgSeries = YEARS.map(y => avgField((byYear[y] || []).filter(r => r.locale_tier === profileTierCompare), "librarian_fte"));
+      traces.push({
+        x: YEAR_LABELS, y: tierAvgSeries, mode: "lines+markers", name: profileTierCompare,
+        line: { color: TIER_COLORS[profileTierCompare], width: 2.5, dash: "dash" }, marker: { size: 5 },
+        hovertemplate: "%{x}<br>" + profileTierCompare + " avg FTE: %{y:.2f}<extra></extra>"
+      });
+    }
+  }
+
+  Plotly.newPlot("profileFteChart", traces, {
+    margin: { t: 10, r: 20, l: 50, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 },
+    yaxis: { title: "Librarian FTE", gridcolor: "#E5E5E0", zeroline: false },
+    xaxis: { gridcolor: "#E5E5E0" },
+    legend: { orientation: "h", y: -0.2 },
+    hovermode: "x unified"
+  }, { displayModeBar: false, responsive: true });
+}
+
+// ---- Time-view: ELA chart (district vs. tier avg vs. state avg) ----
+function renderProfileElaChart(grade, divId) {
+  const field = "ela_pct_met_grade" + grade;
+  const stateField = "grade" + grade + "_pct_met";
+  const tier = currentProfileTier();
+  const tierColor = TIER_COLORS[tier] || "#8A8678";
+  const name = districtDisplayName(profileDistrict);
+
+  // 2019-20 is excluded outright (not just left blank) -- no standardized
+  // test data exists for that year at all (COVID cancellation), so
+  // including it would draw a misleading gap through the line.
+  const chartYears = YEARS.filter(y => y !== "2019-20");
+  const chartYearLabels = chartYears.map(y => y.replace("-", "\u2013"));
+
+  const districtSeries = chartYears.map(y => {
+    const r = districtRowForYear(profileDistrict, y);
+    return r && isNum(r[field]) ? r[field] : null;
+  });
+  const tierAvgSeries = chartYears.map(y => avgField((byYear[y] || []).filter(r => r.locale_tier === tier), field));
+  const stateAvgSeries = chartYears.map(y => {
+    const stateRow = stateElaByYear[y];
+    if (stateRow && isNum(stateRow[stateField])) return stateRow[stateField];
+    return avgField(byYear[y] || [], field); // fallback if state_ela_trend.csv is missing
+  });
+
+  Plotly.newPlot(divId, [
+    {
+      x: chartYearLabels, y: districtSeries, mode: "lines+markers", name: name,
+      line: { color: tierColor, width: 3 }, marker: { size: 6 },
+      hovertemplate: "%{x}<br>Met standard: %{y:.1f}%<extra>" + name + "</extra>"
+    },
+    {
+      x: chartYearLabels, y: tierAvgSeries, mode: "lines", name: (tier || "Tier") + " average",
+      line: { color: "#8A8678", width: 2, dash: "dash" },
+      hovertemplate: "%{x}<br>Tier avg: %{y:.1f}%<extra></extra>"
+    },
+    {
+      x: chartYearLabels, y: stateAvgSeries, mode: "lines", name: "Statewide average",
+      line: { color: "#1A1A1A", width: 1.5, dash: "dot" },
+      hovertemplate: "%{x}<br>State avg: %{y:.1f}%<extra></extra>"
+    }
+  ], {
+    margin: { t: 10, r: 20, l: 50, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 },
+    yaxis: { title: `Grade ${grade} \u2014 % Met Standard`, gridcolor: "#E5E5E0", zeroline: false, range: [0, 100] },
+    xaxis: { gridcolor: "#E5E5E0" },
+    legend: { orientation: "h", y: -0.25 },
+    hovermode: "x unified"
+  }, { displayModeBar: false, responsive: true });
+}
+
+// ---- Single-year view: grouped comparison bars ----
+function renderProfileSingleView(yearIdx) {
+  const year = YEARS[yearIdx];
+  document.getElementById("profileYearReadout").textContent = YEAR_LABELS[yearIdx];
+
+  const row = districtRowForYear(profileDistrict, year);
+  const tier = row ? row.locale_tier : currentProfileTier();
+  const tierColor = TIER_COLORS[tier] || "#8A8678";
+  const name = districtDisplayName(profileDistrict);
+  const yearRows = byYear[year] || [];
+  const tierRows = yearRows.filter(r => r.locale_tier === tier);
+
+  const districtFte = row ? (row.librarian_fte || 0) : null;
+  const tierFte = avgField(tierRows, "librarian_fte");
+  const stateFte = avgField(yearRows, "librarian_fte");
+
+  Plotly.newPlot("profileFteBar", [{
+    type: "bar",
+    x: [name, (tier || "Tier") + " avg", "Statewide"],
+    y: [districtFte, tierFte, stateFte],
+    marker: { color: [tierColor, "#B7B4A8", "#55534C"] },
+    hovertemplate: "%{x}<br>FTE: %{y:.2f}<extra></extra>"
+  }], {
+    title: { text: `Librarian FTE, ${YEAR_LABELS[yearIdx]}`, font: { size: 13, family: "Plus Jakarta Sans" } },
+    margin: { t: 40, r: 20, l: 50, b: 60 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 11 },
+    yaxis: { title: "FTE", gridcolor: "#E5E5E0", zeroline: true, zerolinecolor: "#D3D1C8" }
+  }, { displayModeBar: false, responsive: true });
+
+  renderProfileElaBar(4, "profileElaBar4", year, yearIdx, row, tier, tierColor, tierRows, yearRows, name);
+  renderProfileElaBar(8, "profileElaBar8", year, yearIdx, row, tier, tierColor, tierRows, yearRows, name);
+}
+
+function renderProfileElaBar(grade, divId, year, yearIdx, row, tier, tierColor, tierRows, yearRows, name) {
+  const elaBarEl = document.getElementById(divId);
+
+  // Defensively clear the container every time, regardless of which
+  // branch runs below -- this guarantees no leftover fallback message
+  // (or leftover Plotly chart) from a previous render can persist
+  // underneath/behind whatever renders next.
+  try { Plotly.purge(elaBarEl); } catch (err) { /* not a Plotly chart yet -- ignore */ }
+  elaBarEl.innerHTML = "";
+
+  if (year === "2019-20") {
+    elaBarEl.innerHTML =
+      "<div class='chart-fallback'>No standardized test data available for 2019&ndash;20 (testing was cancelled statewide due to COVID).</div>";
+    return;
+  }
+
+  const field = "ela_pct_met_grade" + grade;
+  const stateField = "grade" + grade + "_pct_met";
+  const districtEla = row && isNum(row[field]) ? row[field] : null;
+  const tierEla = avgField(tierRows, field);
+  const stateRow = stateElaByYear[year];
+  const stateEla = stateRow && isNum(stateRow[stateField]) ? stateRow[stateField] : avgField(yearRows, field);
+
+  Plotly.newPlot(divId, [{
+    type: "bar",
+    x: [name, (tier || "Tier") + " avg", "Statewide"],
+    y: [districtEla, tierEla, stateEla],
+    marker: { color: [tierColor, "#B7B4A8", "#55534C"] },
+    hovertemplate: "%{x}<br>Met standard: %{y:.1f}%<extra></extra>"
+  }], {
+    title: { text: `Grade ${grade} Met Standard, ${YEAR_LABELS[yearIdx]}`, font: { size: 12.5, family: "Plus Jakarta Sans" } },
+    margin: { t: 40, r: 15, l: 45, b: 60 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 10.5 },
+    yaxis: { title: "% Met Standard", gridcolor: "#E5E5E0", zeroline: true, zerolinecolor: "#D3D1C8", range: [0, 100] }
+  }, { displayModeBar: false, responsive: true });
+}
+</script>
+</body>
+</html>
