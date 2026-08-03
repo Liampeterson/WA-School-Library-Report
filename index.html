@@ -1115,36 +1115,27 @@
       <div class="analysis-block">
         <h3 class="analysis-subhead">Is the Access Gap Statistically Significant?</h3>
         <p class="dek" style="margin-bottom:14px;">A chi-square test of independence between locale tier and
-        whether a district has any librarian at all (2024&ndash;25). Unlike a test of achievement scores, this
-        tests the underlying fact this whole dashboard is built on: whether a district's locale predicts whether
-        it has a librarian in the first place.</p>
+        whether a district has any librarian at all (2024&ndash;25) &mdash; testing whether a district's locale
+        predicts whether it has a librarian in the first place.</p>
         <div class="static-figure">
           <img src="assets/access_chi_square.png" alt="Stacked bar chart of districts with vs without a librarian, by locale tier, 2024-25, with chi-square test result">
         </div>
         <div class="figure-caption">
           <strong>Result: &chi;&sup2; = 92.5, p &lt; 0.0001 (Large Urban excluded from the test itself &mdash;
           only one district statewide, too few to satisfy the test's assumptions, though still shown in the chart
-          for completeness).</strong> This is an overwhelmingly significant result: locale tier and librarian
-          access are very clearly not independent. Unlike an achievement-based test, this rigorously confirms
-          the dashboard's central, most load-bearing claim rather than complicating it.
+          for completeness).</strong> Locale tier and librarian access are not independent.
         </div>
       </div>
 
       <div class="analysis-block">
         <h3 class="analysis-subhead">Where Is Achievement Data Actually Missing?</h3>
-        <p class="dek" style="margin-bottom:14px;">DATA_NOTES.md already states that achievement-data suppression
-        (small sample sizes, &lt;10 students) is concentrated in rural districts. This heatmap shows that pattern
-        directly rather than leaving it as a sentence in a methodology file.</p>
+        <p class="dek" style="margin-bottom:14px;">Achievement-data suppression (small sample sizes, &lt;10
+        students) is concentrated in rural districts. This heatmap shows the pattern by tier and year.</p>
         <div class="static-figure">
           <img src="assets/missingness_heatmap.png" alt="Heatmap of percent of districts with usable Grade 4 achievement data, by locale tier and year">
         </div>
         <div class="figure-caption">
-          Distant Rural and Rural districts consistently have the lowest data availability of any tier, every
-          year &mdash; direct visual confirmation of the suppression pattern already disclosed elsewhere on this
-          site. <strong>While building this chart, a real data bug was found and fixed:</strong> Seattle Public
-          Schools (Washington's largest district, and the only Large Urban district) was previously missing from
-          every achievement figure on this dashboard due to a district-name mismatch in the data-cleaning
-          pipeline. It has since been corrected &mdash; see DATA_NOTES.md Section 8 for the full account.
+          Distant Rural and Rural districts consistently have the lowest data availability of any tier, every year.
         </div>
       </div>
 
