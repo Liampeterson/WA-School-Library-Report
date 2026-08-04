@@ -605,6 +605,24 @@
   }
 
   /* ---- District profile ---- */
+  .map-wrap {
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    padding: 16px;
+    background: var(--bg-alt);
+  }
+
+  #districtMap {
+    cursor: pointer;
+  }
+
+  .map-legend-note {
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin-top: 10px;
+    text-align: center;
+  }
+
   .profile-search-wrap {
     position: relative;
     max-width: 440px;
@@ -988,11 +1006,16 @@
       <div class="block-head">
         <div class="eyebrow">02 &middot; District Report Card</div>
         <h2>District Report Card</h2>
-        <p class="dek">The chart below starts with Washington's statewide librarian staffing trend. Search for any of the state's 298 districts to add it to the chart and compare it directly against its own locale tier and the state as a whole.</p>
+        <p class="dek">Click any district on the map, or search below, to see its full library staffing report card &mdash; compared against its own locale tier and the state as a whole.</p>
       </div>
 
-      <div class="profile-search-wrap">
-        <input type="text" id="districtSearch" class="profile-search" placeholder="Search for a district&hellip;" autocomplete="off" aria-label="Search for a district" aria-expanded="false" role="combobox">
+      <div class="map-wrap">
+        <div id="districtMap" style="height: 560px;"></div>
+        <div class="map-legend-note">Districts are colored by Library Staffing Grade (see Section 02 below for methodology). Click any district to open its report card.</div>
+      </div>
+
+      <div class="profile-search-wrap" style="margin-top:28px;">
+        <input type="text" id="districtSearch" class="profile-search" placeholder="Or search for a district&hellip;" autocomplete="off" aria-label="Search for a district" aria-expanded="false" role="combobox">
         <div class="profile-search-results" id="profileSearchResults" role="listbox"></div>
       </div>
 
@@ -1275,6 +1298,7 @@ function init() {
   initDistrictProfile();
   initTierCompareButtons();
   renderProfileFteChart(); // statewide-only default, before any district is searched
+  loadDistrictMap();
   initPageNav();
 }
 
@@ -1968,6 +1992,81 @@ function renderDistrictGrade(d) {
   }
   badgeEl.textContent = grade.letter;
   badgeEl.className = "grade-badge grade-" + grade.letter.charAt(0);
+}
+
+// ============================================================
+// District map: click a district to open its report card,
+// colored by Library Staffing Grade (same grading logic used in the
+// report card badge itself -- computeDistrictGrade() above).
+// ============================================================
+
+const MAP_GRADE_COLORS = { A: "#3C6B49", B: "#5B8A5E", C: "#BB7E3D", D: "#B0684A", F: "#A23B2E", "N/A": "#B7B4A8" };
+const MAP_GRADE_ORDER = ["A", "B", "C", "D", "F", "N/A"];
+
+let districtGeoJson = null;
+
+function loadDistrictMap() {
+  fetch("output/wa_district_boundaries.geojson")
+    .then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(geo => {
+      districtGeoJson = geo;
+      renderDistrictMap();
+    })
+    .catch(err => {
+      document.getElementById("districtMap").innerHTML =
+        "<p style='color:#A23B2E; font-family: Space Mono, monospace; font-size:12.5px; padding:20px;'>Could not load output/wa_district_boundaries.geojson &mdash; check that this file sits in the <code>output/</code> folder next to index.html.</p>";
+      console.error(err);
+    });
+}
+
+function renderDistrictMap() {
+  if (!districtGeoJson) return;
+
+  const gradeByDistrict = {};
+  districts.forEach(d => {
+    const g = computeDistrictGrade(d);
+    gradeByDistrict[d] = g ? g.letter : "N/A";
+  });
+
+  const traces = MAP_GRADE_ORDER.map(letter => {
+    const locs = districts.filter(d => gradeByDistrict[d] === letter);
+    return {
+      type: "choropleth",
+      geojson: districtGeoJson,
+      featureidkey: "properties.district",
+      locations: locs,
+      z: locs.map(() => 1),
+      zmin: 0, zmax: 1,
+      showscale: false,
+      colorscale: [[0, MAP_GRADE_COLORS[letter]], [1, MAP_GRADE_COLORS[letter]]],
+      marker: { line: { color: "#ECE9E1", width: 0.6 } },
+      name: letter === "N/A" ? "No grade" : `Grade ${letter}`,
+      text: locs.map(d => districtDisplayName(d)),
+      hovertemplate: "%{text}<br>Grade " + (letter === "N/A" ? "N/A" : letter) + "<extra></extra>",
+      showlegend: locs.length > 0,
+    };
+  });
+
+  Plotly.newPlot("districtMap", traces, {
+    geo: { fitbounds: "geojson", visible: false, bgcolor: "rgba(0,0,0,0)" },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    margin: { t: 10, r: 10, l: 10, b: 10 },
+    legend: { orientation: "h", y: -0.02, font: { size: 11 } },
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 }
+  }, { displayModeBar: false, responsive: true }).then(gd => {
+    gd.on("plotly_click", (evt) => {
+      const point = evt.points && evt.points[0];
+      const districtName = point ? point.location : null;
+      if (!districtName) return;
+      selectProfileDistrict(districtName);
+      document.getElementById("districtSearch").value = districtDisplayName(districtName);
+      document.getElementById("profileSearchResults").classList.remove("open");
+    });
+  });
 }
 
 function initTierCompareButtons() {
