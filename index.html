@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
   :root {
     --bg: #F5F4F0;
@@ -616,6 +617,44 @@
     cursor: pointer;
   }
 
+  #districtMap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #districtMap path {
+    transition: fill-opacity 0.1s ease;
+  }
+
+  #districtMap path:hover {
+    fill-opacity: 0.8;
+  }
+
+  .map-tooltip {
+    position: absolute;
+    pointer-events: none;
+    z-index: 20;
+    background: #1A1A1A;
+    color: #F5F4F0;
+    padding: 10px 13px;
+    border-radius: 3px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11.5px;
+    line-height: 1.7;
+    white-space: nowrap;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+    display: none;
+  }
+
+  .map-tooltip .tt-title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    margin-bottom: 4px;
+    display: block;
+  }
+
   .map-legend-note {
     font-size: 12px;
     color: var(--ink-faint);
@@ -1006,21 +1045,14 @@
       <div class="block-head">
         <div class="eyebrow">02 &middot; District Report Card</div>
         <h2>District Report Card</h2>
-        <p class="dek">Click any district on the map, or search below, to see its full library staffing report card &mdash; compared against its own locale tier and the state as a whole.</p>
-      </div>
-
-      <div class="control-block">
-        <span class="control-label">Color By</span>
-        <div class="btn-group" id="mapColorButtons">
-          <button class="btn active" data-mode="locale" type="button">Locale Tier</button>
-          <button class="btn" data-mode="grade" type="button">Library Staffing Grade</button>
-        </div>
+        <p class="dek">Hover any district to see its staffing and achievement at a glance, colored by locale tier &mdash; click it, or search below, to open its full library staffing report card.</p>
       </div>
 
       <div class="map-wrap">
-        <div id="districtMap" style="height: 560px;"></div>
+        <div id="districtMap" style="height: 560px; position: relative;"></div>
+        <div id="mapTooltip" class="map-tooltip"></div>
         <div class="tier-legend" id="mapLegend" style="justify-content:center;"></div>
-        <div class="map-legend-note" id="mapLegendNote">Click any district to open its report card.</div>
+        <div class="map-legend-note">Click any district to open its report card.</div>
       </div>
 
       <div class="profile-search-wrap" style="margin-top:28px;">
@@ -2004,43 +2036,18 @@ function renderDistrictGrade(d) {
 }
 
 // ============================================================
-// District map: click a district to open its report card.
-// Colorable by either Locale Tier or Library Staffing Grade (the same
-// grading logic used in the report card badge itself --
-// computeDistrictGrade() above).
+// District map: a real reference map, viewable and hoverable on its
+// own before any click happens. Colored by locale tier only (rural to
+// urban). Clicking a district opens its full report card below.
+//
+// Rendered directly with D3 (SVG paths + a manual projection) rather
+// than Plotly's choropleth trace type, which proved unreliable for
+// this custom-geojson use case -- it repeatedly rendered as a single
+// flat color with no visible district borders. Building the SVG
+// directly guarantees visible borders and full control over styling.
 // ============================================================
 
-const MAP_GRADE_COLORS = { A: "#3C6B49", B: "#5B8A5E", C: "#BB7E3D", D: "#B0684A", F: "#A23B2E", "N/A": "#B7B4A8" };
-const MAP_GRADE_ORDER = ["A", "B", "C", "D", "F", "N/A"];
-
-const MAP_LOCALE_COLORS = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
-const MAP_LOCALE_ORDER = TIER_ORDER.concat(["Unclassified"]);
-
-const MAP_MODES = {
-  locale: {
-    order: MAP_LOCALE_ORDER,
-    colors: MAP_LOCALE_COLORS,
-    label: (v) => v,
-    valueFor: (d) => {
-      const row = districtRowForYear(d, GRADE_YEAR);
-      return (row && row.locale_tier) ? row.locale_tier : "Unclassified";
-    },
-    note: "Districts are colored by locale tier (rural to urban). Click any district to open its report card."
-  },
-  grade: {
-    order: MAP_GRADE_ORDER,
-    colors: MAP_GRADE_COLORS,
-    label: (v) => v === "N/A" ? "No grade" : `Grade ${v}`,
-    valueFor: (d) => {
-      const g = computeDistrictGrade(d);
-      return g ? g.letter : "N/A";
-    },
-    note: "Districts are colored by Library Staffing Grade \u2014 select a district below to see how that grade is calculated. Click any district to open its report card."
-  }
-};
-
 let districtGeoJson = null;
-let mapColorMode = "locale";
 
 function loadDistrictMap() {
   fetch("output/wa_district_boundaries.geojson")
@@ -2050,8 +2057,8 @@ function loadDistrictMap() {
     })
     .then(geo => {
       districtGeoJson = geo;
-      initMapColorButtons();
       renderDistrictMap();
+      renderMapLegend();
     })
     .catch(err => {
       document.getElementById("districtMap").innerHTML =
@@ -2060,109 +2067,108 @@ function loadDistrictMap() {
     });
 }
 
-function initMapColorButtons() {
-  document.querySelectorAll("#mapColorButtons .btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      mapColorMode = btn.dataset.mode;
-      document.querySelectorAll("#mapColorButtons .btn").forEach(b => b.classList.toggle("active", b === btn));
-      renderDistrictMap();
-    });
-  });
+function districtLocaleTier(d) {
+  const row = districtRowForYear(d, GRADE_YEAR);
+  return (row && row.locale_tier) ? row.locale_tier : "Unclassified";
 }
 
 function renderDistrictMap() {
-  if (!districtGeoJson) return;
+  if (!districtGeoJson || typeof d3 === "undefined") return;
 
-  const mode = MAP_MODES[mapColorMode];
+  const container = document.getElementById("districtMap");
+  container.innerHTML = "";
 
-  // Districts actually present as boundary shapes (295 of 298 -- a
-  // handful of special state-run schools have no geographic boundary).
-  const mappable = districtGeoJson.features.map(f => f.properties.district);
-  const locs = mappable.filter(d => districts.includes(d));
+  const width = container.clientWidth || 900;
+  const height = 560;
 
-  const valueByDistrict = {};
-  locs.forEach(d => { valueByDistrict[d] = mode.valueFor(d); });
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
 
-  const zValues = locs.map(d => mode.order.indexOf(valueByDistrict[d]) + 0.5);
+  const projection = d3.geoMercator().fitSize([width, height], districtGeoJson);
+  const pathGen = d3.geoPath().projection(projection);
 
-  // Build a discrete colorscale: N equal-width bands, one solid color each,
-  // rather than stacking multiple choropleth traces (which Plotly doesn't
-  // reliably layer -- only the last trace tends to actually render).
-  const n = mode.order.length;
-  const colorscale = [];
-  mode.order.forEach((val, i) => {
-    colorscale.push([i / n, mode.colors[val]]);
-    colorscale.push([(i + 1) / n, mode.colors[val]]);
-  });
+  const localeColors = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
+  const tooltip = document.getElementById("mapTooltip");
 
-  // Hover info: Librarian FTE, FTE per 1,000 students, and Grade 4 ELA
-  // % at/above standard -- shown regardless of which coloring mode is
-  // active, since these are useful context either way.
-  const customdata = locs.map(d => {
-    const row = districtRowForYear(d, GRADE_YEAR);
-    if (!row) return ["\u2014", "\u2014", "\u2014"];
-
-    const fte = fmtNum(row.librarian_fte, 1);
-
-    let ftePer1000 = "\u2014";
-    if ((row.librarian_fte || 0) === 0) {
-      ftePer1000 = "0.00";
-    } else if (isNum(row.students_per_librarian) && row.students_per_librarian > 0) {
-      ftePer1000 = fmtNum((1 / row.students_per_librarian) * 1000, 2);
-    }
-
-    const grade4 = isNum(row.ela_pct_met_grade4) ? fmtNum(row.ela_pct_met_grade4, 1) + "%" : "n/a";
-
-    return [fte, ftePer1000, grade4];
-  });
-
-  const trace = {
-    type: "choropleth",
-    geojson: districtGeoJson,
-    featureidkey: "properties.district",
-    locations: locs,
-    z: zValues,
-    zmin: 0, zmax: n,
-    colorscale: colorscale,
-    showscale: false,
-    marker: { line: { color: "#ECE9E1", width: 0.6 } },
-    text: locs.map(d => districtDisplayName(d)),
-    customdata: customdata,
-    hovertemplate:
-      "<b>%{text}</b><br>" +
-      "Librarian FTE: %{customdata[0]}<br>" +
-      "FTE per 1,000 students: %{customdata[1]}<br>" +
-      "Grade 4 at/above ELA standard: %{customdata[2]}" +
-      "<extra></extra>",
-  };
-
-  Plotly.newPlot("districtMap", [trace], {
-    geo: { fitbounds: "geojson", visible: false, bgcolor: "rgba(0,0,0,0)" },
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 10, r: 10, l: 10, b: 10 },
-    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 }
-  }, { displayModeBar: false, responsive: true }).then(gd => {
-    gd.on("plotly_click", (evt) => {
-      const point = evt.points && evt.points[0];
-      const districtName = point ? point.location : null;
-      if (!districtName) return;
-      selectProfileDistrict(districtName);
-      document.getElementById("districtSearch").value = districtDisplayName(districtName);
+  svg.selectAll("path")
+    .data(districtGeoJson.features)
+    .enter()
+    .append("path")
+    .attr("d", pathGen)
+    .attr("fill", f => localeColors[districtLocaleTier(f.properties.district)] || "#B7B4A8")
+    .attr("stroke", "#F5F4F0")
+    .attr("stroke-width", 0.8)
+    .style("cursor", "pointer")
+    .on("mouseenter", function (event, f) {
+      d3.select(this).attr("stroke", "#1A1A1A").attr("stroke-width", 1.6).raise();
+      showMapTooltip(f.properties.district);
+    })
+    .on("mousemove", (event) => positionMapTooltip(event))
+    .on("mouseleave", function () {
+      d3.select(this).attr("stroke", "#F5F4F0").attr("stroke-width", 0.8);
+      tooltip.style.display = "none";
+    })
+    .on("click", (event, f) => {
+      const name = f.properties.district;
+      if (!districts.includes(name)) return;
+      selectProfileDistrict(name);
+      document.getElementById("districtSearch").value = districtDisplayName(name);
       document.getElementById("profileSearchResults").classList.remove("open");
     });
-  });
-
-  renderMapLegend(mode);
-  const noteEl = document.getElementById("mapLegendNote");
-  if (noteEl) noteEl.textContent = mode.note;
 }
 
-function renderMapLegend(mode) {
+function showMapTooltip(districtName) {
+  const tooltip = document.getElementById("mapTooltip");
+  const row = districtRowForYear(districtName, GRADE_YEAR);
+  const tier = districtLocaleTier(districtName);
+
+  const fte = row ? fmtNum(row.librarian_fte, 1) : "\u2014";
+  let ftePer1000 = "\u2014";
+  if (row && (row.librarian_fte || 0) === 0) {
+    ftePer1000 = "0.00";
+  } else if (row && isNum(row.students_per_librarian) && row.students_per_librarian > 0) {
+    ftePer1000 = fmtNum((1 / row.students_per_librarian) * 1000, 2);
+  }
+  const grade4 = row && isNum(row.ela_pct_met_grade4) ? fmtNum(row.ela_pct_met_grade4, 1) + "%" : "n/a";
+
+  tooltip.innerHTML = `
+    <span class="tt-title">${districtDisplayName(districtName)}</span>
+    ${tier}<br>
+    Librarian FTE: ${fte}<br>
+    FTE per 1,000 students: ${ftePer1000}<br>
+    Grade 4 at/above ELA standard: ${grade4}
+  `;
+  tooltip.style.display = "block";
+}
+
+function positionMapTooltip(event) {
+  const tooltip = document.getElementById("mapTooltip");
+  const wrap = document.getElementById("districtMap");
+  const rect = wrap.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  // Keep the tooltip from running off the right/bottom edge of the map.
+  const tw = tooltip.offsetWidth || 200;
+  const th = tooltip.offsetHeight || 80;
+  let left = x + 16;
+  let top = y + 16;
+  if (left + tw > wrap.clientWidth) left = x - tw - 16;
+  if (top + th > wrap.clientHeight) top = y - th - 16;
+
+  tooltip.style.left = left + "px";
+  tooltip.style.top = top + "px";
+}
+
+function renderMapLegend() {
   const el = document.getElementById("mapLegend");
   if (!el) return;
-  el.innerHTML = mode.order.map(val =>
-    `<span><span class="swatch" style="background:${mode.colors[val]}"></span>${mode.label(val)}</span>`
+  const order = TIER_ORDER.concat(["Unclassified"]);
+  const colors = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
+  el.innerHTML = order.map(tier =>
+    `<span><span class="swatch" style="background:${colors[tier]}"></span>${tier}</span>`
   ).join("");
 }
 
