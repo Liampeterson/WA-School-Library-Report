@@ -1009,9 +1009,18 @@
         <p class="dek">Click any district on the map, or search below, to see its full library staffing report card &mdash; compared against its own locale tier and the state as a whole.</p>
       </div>
 
+      <div class="control-block">
+        <span class="control-label">Color By</span>
+        <div class="btn-group" id="mapColorButtons">
+          <button class="btn active" data-mode="locale" type="button">Locale Tier</button>
+          <button class="btn" data-mode="grade" type="button">Library Staffing Grade</button>
+        </div>
+      </div>
+
       <div class="map-wrap">
         <div id="districtMap" style="height: 560px;"></div>
-        <div class="map-legend-note">Districts are colored by Library Staffing Grade (see Section 02 below for methodology). Click any district to open its report card.</div>
+        <div class="tier-legend" id="mapLegend" style="justify-content:center;"></div>
+        <div class="map-legend-note" id="mapLegendNote">Click any district to open its report card.</div>
       </div>
 
       <div class="profile-search-wrap" style="margin-top:28px;">
@@ -1995,15 +2004,43 @@ function renderDistrictGrade(d) {
 }
 
 // ============================================================
-// District map: click a district to open its report card,
-// colored by Library Staffing Grade (same grading logic used in the
-// report card badge itself -- computeDistrictGrade() above).
+// District map: click a district to open its report card.
+// Colorable by either Locale Tier or Library Staffing Grade (the same
+// grading logic used in the report card badge itself --
+// computeDistrictGrade() above).
 // ============================================================
 
 const MAP_GRADE_COLORS = { A: "#3C6B49", B: "#5B8A5E", C: "#BB7E3D", D: "#B0684A", F: "#A23B2E", "N/A": "#B7B4A8" };
 const MAP_GRADE_ORDER = ["A", "B", "C", "D", "F", "N/A"];
 
+const MAP_LOCALE_COLORS = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
+const MAP_LOCALE_ORDER = TIER_ORDER.concat(["Unclassified"]);
+
+const MAP_MODES = {
+  locale: {
+    order: MAP_LOCALE_ORDER,
+    colors: MAP_LOCALE_COLORS,
+    label: (v) => v,
+    valueFor: (d) => {
+      const row = districtRowForYear(d, GRADE_YEAR);
+      return (row && row.locale_tier) ? row.locale_tier : "Unclassified";
+    },
+    note: "Districts are colored by locale tier (rural to urban). Click any district to open its report card."
+  },
+  grade: {
+    order: MAP_GRADE_ORDER,
+    colors: MAP_GRADE_COLORS,
+    label: (v) => v === "N/A" ? "No grade" : `Grade ${v}`,
+    valueFor: (d) => {
+      const g = computeDistrictGrade(d);
+      return g ? g.letter : "N/A";
+    },
+    note: "Districts are colored by Library Staffing Grade \u2014 select a district below to see how that grade is calculated. Click any district to open its report card."
+  }
+};
+
 let districtGeoJson = null;
+let mapColorMode = "locale";
 
 function loadDistrictMap() {
   fetch("output/wa_district_boundaries.geojson")
@@ -2013,6 +2050,7 @@ function loadDistrictMap() {
     })
     .then(geo => {
       districtGeoJson = geo;
+      initMapColorButtons();
       renderDistrictMap();
     })
     .catch(err => {
@@ -2022,40 +2060,87 @@ function loadDistrictMap() {
     });
 }
 
+function initMapColorButtons() {
+  document.querySelectorAll("#mapColorButtons .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      mapColorMode = btn.dataset.mode;
+      document.querySelectorAll("#mapColorButtons .btn").forEach(b => b.classList.toggle("active", b === btn));
+      renderDistrictMap();
+    });
+  });
+}
+
 function renderDistrictMap() {
   if (!districtGeoJson) return;
 
-  const gradeByDistrict = {};
-  districts.forEach(d => {
-    const g = computeDistrictGrade(d);
-    gradeByDistrict[d] = g ? g.letter : "N/A";
+  const mode = MAP_MODES[mapColorMode];
+
+  // Districts actually present as boundary shapes (295 of 298 -- a
+  // handful of special state-run schools have no geographic boundary).
+  const mappable = districtGeoJson.features.map(f => f.properties.district);
+  const locs = mappable.filter(d => districts.includes(d));
+
+  const valueByDistrict = {};
+  locs.forEach(d => { valueByDistrict[d] = mode.valueFor(d); });
+
+  const zValues = locs.map(d => mode.order.indexOf(valueByDistrict[d]) + 0.5);
+
+  // Build a discrete colorscale: N equal-width bands, one solid color each,
+  // rather than stacking multiple choropleth traces (which Plotly doesn't
+  // reliably layer -- only the last trace tends to actually render).
+  const n = mode.order.length;
+  const colorscale = [];
+  mode.order.forEach((val, i) => {
+    colorscale.push([i / n, mode.colors[val]]);
+    colorscale.push([(i + 1) / n, mode.colors[val]]);
   });
 
-  const traces = MAP_GRADE_ORDER.map(letter => {
-    const locs = districts.filter(d => gradeByDistrict[d] === letter);
-    return {
-      type: "choropleth",
-      geojson: districtGeoJson,
-      featureidkey: "properties.district",
-      locations: locs,
-      z: locs.map(() => 1),
-      zmin: 0, zmax: 1,
-      showscale: false,
-      colorscale: [[0, MAP_GRADE_COLORS[letter]], [1, MAP_GRADE_COLORS[letter]]],
-      marker: { line: { color: "#ECE9E1", width: 0.6 } },
-      name: letter === "N/A" ? "No grade" : `Grade ${letter}`,
-      text: locs.map(d => districtDisplayName(d)),
-      hovertemplate: "%{text}<br>Grade " + (letter === "N/A" ? "N/A" : letter) + "<extra></extra>",
-      showlegend: locs.length > 0,
-    };
+  // Hover info: Librarian FTE, FTE per 1,000 students, and Grade 4 ELA
+  // % at/above standard -- shown regardless of which coloring mode is
+  // active, since these are useful context either way.
+  const customdata = locs.map(d => {
+    const row = districtRowForYear(d, GRADE_YEAR);
+    if (!row) return ["\u2014", "\u2014", "\u2014"];
+
+    const fte = fmtNum(row.librarian_fte, 1);
+
+    let ftePer1000 = "\u2014";
+    if ((row.librarian_fte || 0) === 0) {
+      ftePer1000 = "0.00";
+    } else if (isNum(row.students_per_librarian) && row.students_per_librarian > 0) {
+      ftePer1000 = fmtNum((1 / row.students_per_librarian) * 1000, 2);
+    }
+
+    const grade4 = isNum(row.ela_pct_met_grade4) ? fmtNum(row.ela_pct_met_grade4, 1) + "%" : "n/a";
+
+    return [fte, ftePer1000, grade4];
   });
 
-  Plotly.newPlot("districtMap", traces, {
+  const trace = {
+    type: "choropleth",
+    geojson: districtGeoJson,
+    featureidkey: "properties.district",
+    locations: locs,
+    z: zValues,
+    zmin: 0, zmax: n,
+    colorscale: colorscale,
+    showscale: false,
+    marker: { line: { color: "#ECE9E1", width: 0.6 } },
+    text: locs.map(d => districtDisplayName(d)),
+    customdata: customdata,
+    hovertemplate:
+      "<b>%{text}</b><br>" +
+      "Librarian FTE: %{customdata[0]}<br>" +
+      "FTE per 1,000 students: %{customdata[1]}<br>" +
+      "Grade 4 at/above ELA standard: %{customdata[2]}" +
+      "<extra></extra>",
+  };
+
+  Plotly.newPlot("districtMap", [trace], {
     geo: { fitbounds: "geojson", visible: false, bgcolor: "rgba(0,0,0,0)" },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
     margin: { t: 10, r: 10, l: 10, b: 10 },
-    legend: { orientation: "h", y: -0.02, font: { size: 11 } },
     font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 12 }
   }, { displayModeBar: false, responsive: true }).then(gd => {
     gd.on("plotly_click", (evt) => {
@@ -2067,6 +2152,18 @@ function renderDistrictMap() {
       document.getElementById("profileSearchResults").classList.remove("open");
     });
   });
+
+  renderMapLegend(mode);
+  const noteEl = document.getElementById("mapLegendNote");
+  if (noteEl) noteEl.textContent = mode.note;
+}
+
+function renderMapLegend(mode) {
+  const el = document.getElementById("mapLegend");
+  if (!el) return;
+  el.innerHTML = mode.order.map(val =>
+    `<span><span class="swatch" style="background:${mode.colors[val]}"></span>${mode.label(val)}</span>`
+  ).join("");
 }
 
 function initTierCompareButtons() {
