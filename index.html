@@ -607,6 +607,7 @@
 
   /* ---- District profile ---- */
   .map-wrap {
+    position: relative;
     border: 1px solid var(--rule-strong);
     border-radius: 3px;
     padding: 16px;
@@ -2067,6 +2068,28 @@ function loadDistrictMap() {
     });
 }
 
+// Manual bounding-box calculation, walking raw coordinates directly.
+// Deliberately not using d3.geoBounds() here -- it applies spherical/
+// antimeridian-aware logic that this dataset's ring winding order
+// confuses (it returns the whole globe's extent instead of Washington's
+// actual bounds). This is a plain numeric min/max, so it's unaffected.
+function planarBounds(geojson) {
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  function walk(coords) {
+    if (typeof coords[0] === "number") {
+      const [lon, lat] = coords;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    } else {
+      coords.forEach(walk);
+    }
+  }
+  geojson.features.forEach(f => walk(f.geometry.coordinates));
+  return [[minLon, minLat], [maxLon, maxLat]];
+}
+
 function districtLocaleTier(d) {
   const row = districtRowForYear(d, GRADE_YEAR);
   return (row && row.locale_tier) ? row.locale_tier : "Unclassified";
@@ -2079,7 +2102,20 @@ function renderDistrictMap() {
   container.innerHTML = "";
 
   const width = container.clientWidth || 900;
-  const height = 560;
+
+  // Compute height from Washington's actual geographic bounds, rather
+  // than a fixed guess -- a mismatched box ratio was causing the whole
+  // map to render visibly stretched. Computed manually (not with
+  // d3.geoBounds) because the source data's ring winding order also
+  // confuses d3-geo's spherical bounds calculation, which returned the
+  // whole globe's extent instead of Washington's -- the same underlying
+  // data quirk that caused the geoMercator rendering bug above.
+  const bounds = planarBounds(districtGeoJson); // [[minLon, minLat], [maxLon, maxLat]]
+  const lonSpan = bounds[1][0] - bounds[0][0];
+  const latSpan = bounds[1][1] - bounds[0][1];
+  const dataAspect = lonSpan / latSpan;
+  const height = Math.round(width / dataAspect);
+  container.style.height = height + "px";
 
   const svg = d3.select(container)
     .append("svg")
@@ -2153,18 +2189,19 @@ function showMapTooltip(districtName) {
 
 function positionMapTooltip(event) {
   const tooltip = document.getElementById("mapTooltip");
-  const wrap = document.getElementById("districtMap");
-  const rect = wrap.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const mapEl = document.getElementById("districtMap");
+  const wrapEl = mapEl.closest(".map-wrap"); // the actual positioned ancestor for this tooltip
+  const wrapRect = wrapEl.getBoundingClientRect();
+  const x = event.clientX - wrapRect.left;
+  const y = event.clientY - wrapRect.top;
 
-  // Keep the tooltip from running off the right/bottom edge of the map.
+  // Keep the tooltip from running off the right/bottom edge of the map panel.
   const tw = tooltip.offsetWidth || 200;
   const th = tooltip.offsetHeight || 80;
   let left = x + 16;
   let top = y + 16;
-  if (left + tw > wrap.clientWidth) left = x - tw - 16;
-  if (top + th > wrap.clientHeight) top = y - th - 16;
+  if (left + tw > wrapRect.width) left = x - tw - 16;
+  if (top + th > wrapRect.height) top = y - th - 16;
 
   tooltip.style.left = left + "px";
   tooltip.style.top = top + "px";
