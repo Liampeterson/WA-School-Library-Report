@@ -1046,7 +1046,7 @@
       <div class="block-head">
         <div class="eyebrow">02 &middot; District Report Card</div>
         <h2>District Report Card</h2>
-        <p class="dek">Hover any district to see its staffing and achievement at a glance, colored by locale tier &mdash; click it, or search below, to open its full library staffing report card.</p>
+        <p class="dek">Hover any district to see its staffing and achievement at a glance, colored by librarian staffing level &mdash; click it, or search below, to open its full library staffing report card.</p>
       </div>
 
       <div class="map-wrap">
@@ -2058,6 +2058,7 @@ function loadDistrictMap() {
     })
     .then(geo => {
       districtGeoJson = geo;
+      correctLongitudeCompression(districtGeoJson);
       renderDistrictMap();
       renderMapLegend();
     })
@@ -2066,6 +2067,29 @@ function loadDistrictMap() {
         "<p style='color:#A23B2E; font-family: Space Mono, monospace; font-size:12.5px; padding:20px;'>Could not load output/wa_district_boundaries.geojson &mdash; check that this file sits in the <code>output/</code> folder next to index.html.</p>";
       console.error(err);
     });
+}
+
+// d3.geoIdentity() treats lon/lat as plain flat x/y with no geographic
+// correction. But at Washington's latitude (~47degN), one degree of
+// longitude covers noticeably less real-world distance than one degree
+// of latitude, since longitude lines converge toward the poles. Left
+// uncorrected, this rendered the map about 47% too wide. This scales
+// every longitude value by cos(mean latitude) ONCE, in place, right
+// after loading -- every downstream calculation (bounds, sizing,
+// rendering) then stays automatically consistent with no further
+// correction needed.
+function correctLongitudeCompression(geojson) {
+  const bounds = planarBounds(geojson);
+  const meanLat = (bounds[0][1] + bounds[1][1]) / 2;
+  const cosLat = Math.cos(meanLat * Math.PI / 180);
+  function walk(coords) {
+    if (typeof coords[0] === "number") {
+      coords[0] = coords[0] * cosLat;
+    } else {
+      coords.forEach(walk);
+    }
+  }
+  geojson.features.forEach(f => walk(f.geometry.coordinates));
 }
 
 // Manual bounding-box calculation, walking raw coordinates directly.
@@ -2090,9 +2114,25 @@ function planarBounds(geojson) {
   return [[minLon, minLat], [maxLon, maxLat]];
 }
 
-function districtLocaleTier(d) {
+const FTE_CATEGORY_COLORS = {
+  "Full-Time": "#2C5170",   // deeper blue
+  "Part-Time": "#A9C7DA",   // soft, lighter tint of the same blue
+  "None": "#B7B4A8"         // neutral gray
+};
+const FTE_CATEGORY_ORDER = ["Full-Time", "Part-Time", "None"];
+const FTE_CATEGORY_LABELS = {
+  "Full-Time": "Full-Time Librarian (\u22651.0 FTE)",
+  "Part-Time": "Part-Time Librarian (0.1\u20130.99 FTE)",
+  "None": "No Librarian"
+};
+
+function districtFteCategory(d) {
   const row = districtRowForYear(d, GRADE_YEAR);
-  return (row && row.locale_tier) ? row.locale_tier : "Unclassified";
+  if (!row) return "None";
+  const fte = row.librarian_fte || 0;
+  if (fte >= 1) return "Full-Time";
+  if (fte > 0) return "Part-Time";
+  return "None";
 }
 
 function renderDistrictMap() {
@@ -2133,7 +2173,6 @@ function renderDistrictMap() {
   // geoIdentity otherwise passes latitude through unflipped.
   const pathGen = d3.geoPath().projection(projection);
 
-  const localeColors = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
   const tooltip = document.getElementById("mapTooltip");
 
   svg.selectAll("path")
@@ -2141,7 +2180,7 @@ function renderDistrictMap() {
     .enter()
     .append("path")
     .attr("d", pathGen)
-    .attr("fill", f => localeColors[districtLocaleTier(f.properties.district)] || "#B7B4A8")
+    .attr("fill", f => FTE_CATEGORY_COLORS[districtFteCategory(f.properties.district)] || "#B7B4A8")
     .attr("stroke", "#F5F4F0")
     .attr("stroke-width", 0.8)
     .style("cursor", "pointer")
@@ -2166,7 +2205,7 @@ function renderDistrictMap() {
 function showMapTooltip(districtName) {
   const tooltip = document.getElementById("mapTooltip");
   const row = districtRowForYear(districtName, GRADE_YEAR);
-  const tier = districtLocaleTier(districtName);
+  const category = FTE_CATEGORY_LABELS[districtFteCategory(districtName)];
 
   const fte = row ? fmtNum(row.librarian_fte, 1) : "\u2014";
   let ftePer1000 = "\u2014";
@@ -2179,7 +2218,7 @@ function showMapTooltip(districtName) {
 
   tooltip.innerHTML = `
     <span class="tt-title">${districtDisplayName(districtName)}</span>
-    ${tier}<br>
+    ${category}<br>
     Librarian FTE: ${fte}<br>
     FTE per 1,000 students: ${ftePer1000}<br>
     Grade 4 at/above ELA standard: ${grade4}
@@ -2210,10 +2249,8 @@ function positionMapTooltip(event) {
 function renderMapLegend() {
   const el = document.getElementById("mapLegend");
   if (!el) return;
-  const order = TIER_ORDER.concat(["Unclassified"]);
-  const colors = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
-  el.innerHTML = order.map(tier =>
-    `<span><span class="swatch" style="background:${colors[tier]}"></span>${tier}</span>`
+  el.innerHTML = FTE_CATEGORY_ORDER.map(cat =>
+    `<span><span class="swatch" style="background:${FTE_CATEGORY_COLORS[cat]}"></span>${FTE_CATEGORY_LABELS[cat]}</span>`
   ).join("");
 }
 
