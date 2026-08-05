@@ -605,6 +605,33 @@
     max-width: 720px;
   }
 
+  /* ---- Homepage district map (above 01 Overview) ---- */
+  .home-map-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) 1fr;
+    gap: 44px;
+    align-items: start;
+    padding-bottom: 56px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .home-map-copy h2 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    font-size: 26px;
+    margin: 10px 0 12px;
+  }
+
+  .home-map-copy .dek {
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 900px) {
+    .home-map-row { grid-template-columns: 1fr; }
+    .home-map-col { order: -1; }
+  }
+
   /* ---- District profile ---- */
   .map-wrap {
     position: relative;
@@ -925,7 +952,24 @@
     </section>
 
     <section class="block page-section active" id="overview">
-      <div class="block-head">
+      <div class="home-map-row">
+        <div class="home-map-copy">
+          <div class="eyebrow">Washington at a glance</div>
+          <h2>Where the librarians are &mdash; and aren&rsquo;t</h2>
+          <p class="dek">Every public school district in Washington, colored by whether it employs a school librarian at all. Hover a district for its staffing and reading achievement detail.</p>
+          <!-- Further homepage copy/controls can be added here; deliberately left roomy. -->
+        </div>
+        <div class="home-map-col">
+          <div class="map-wrap">
+            <div id="homeDistrictMap" style="height: 640px; position: relative;"></div>
+            <div id="homeMapTooltip" class="map-tooltip"></div>
+            <div class="tier-legend" id="homeMapLegend" style="justify-content:center;"></div>
+            <div class="map-legend-note">Hover any district for staffing and achievement detail.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block-head" style="margin-top:64px;">
         <div class="eyebrow">01 &middot; Overview</div>
         <h2>The Washington reading crisis, at a glance</h2>
         <p class="dek">Washington spends more per student than most states, yet ranks near the bottom nationally on outcomes &mdash; and the students with the least access to a school librarian are disproportionately the ones already furthest behind.</p>
@@ -2061,10 +2105,13 @@ function loadDistrictMap() {
       correctLongitudeCompression(districtGeoJson);
       renderDistrictMap();
       renderMapLegend();
+      renderHomeDistrictMap();
+      renderHomeMapLegend();
     })
     .catch(err => {
-      document.getElementById("districtMap").innerHTML =
-        "<p style='color:#A23B2E; font-family: Space Mono, monospace; font-size:12.5px; padding:20px;'>Could not load output/wa_district_boundaries.geojson &mdash; check that this file sits in the <code>output/</code> folder next to index.html.</p>";
+      const msg = "<p style='color:#A23B2E; font-family: Space Mono, monospace; font-size:12.5px; padding:20px;'>Could not load output/wa_district_boundaries.geojson &mdash; check that this file sits in the <code>output/</code> folder next to index.html.</p>";
+      document.getElementById("districtMap").innerHTML = msg;
+      document.getElementById("homeDistrictMap").innerHTML = msg;
       console.error(err);
     });
 }
@@ -2251,6 +2298,129 @@ function renderMapLegend() {
   if (!el) return;
   el.innerHTML = FTE_CATEGORY_ORDER.map(cat =>
     `<span><span class="swatch" style="background:${FTE_CATEGORY_COLORS[cat]}"></span>${FTE_CATEGORY_LABELS[cat]}</span>`
+  ).join("");
+}
+
+// ============================================================
+// Homepage district map: same geojson/projection as the District
+// Report Card map above, but a simple binary read (has a librarian at
+// all, at least part-time, vs. none) meant to be legible at a glance
+// as the first thing a visitor sees on the page.
+// ============================================================
+
+const HOME_MAP_COLORS = {
+  has: FTE_CATEGORY_COLORS["Part-Time"],
+  none: FTE_CATEGORY_COLORS["None"]
+};
+const HOME_MAP_LABELS = {
+  has: "Has at least a part-time librarian",
+  none: "No school librarian on staff"
+};
+
+function districtHasLibrarian(d) {
+  const row = districtRowForYear(d, GRADE_YEAR);
+  return !!(row && row.librarian_fte > 0);
+}
+
+function renderHomeDistrictMap() {
+  if (!districtGeoJson || typeof d3 === "undefined") return;
+
+  const container = document.getElementById("homeDistrictMap");
+  container.innerHTML = "";
+
+  const width = container.clientWidth || 900;
+  const bounds = planarBounds(districtGeoJson);
+  const lonSpan = bounds[1][0] - bounds[0][0];
+  const latSpan = bounds[1][1] - bounds[0][1];
+  const height = Math.round(width / (lonSpan / latSpan));
+  container.style.height = height + "px";
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+  const projection = d3.geoIdentity().reflectY(true).fitSize([width, height], districtGeoJson);
+  const pathGen = d3.geoPath().projection(projection);
+
+  const tooltip = document.getElementById("homeMapTooltip");
+
+  svg.selectAll("path")
+    .data(districtGeoJson.features)
+    .enter()
+    .append("path")
+    .attr("d", pathGen)
+    .attr("fill", f => districtHasLibrarian(f.properties.district) ? HOME_MAP_COLORS.has : HOME_MAP_COLORS.none)
+    .attr("stroke", "#F5F4F0")
+    .attr("stroke-width", 0.8)
+    .on("mouseenter", function (event, f) {
+      d3.select(this).attr("stroke", "#1A1A1A").attr("stroke-width", 1.6).raise();
+      showHomeMapTooltip(f.properties.district);
+    })
+    .on("mousemove", (event) => positionHomeMapTooltip(event))
+    .on("mouseleave", function () {
+      d3.select(this).attr("stroke", "#F5F4F0").attr("stroke-width", 0.8);
+      tooltip.style.display = "none";
+    });
+}
+
+function showHomeMapTooltip(districtName) {
+  const tooltip = document.getElementById("homeMapTooltip");
+  const row = districtRowForYear(districtName, GRADE_YEAR);
+  const label = HOME_MAP_LABELS[districtHasLibrarian(districtName) ? "has" : "none"];
+
+  const fte = row ? fmtNum(row.librarian_fte, 1) : "—";
+
+  let ratio = "n/a";
+  if (row && row.librarian_fte > 0 && isNum(row.students_per_librarian)) {
+    ratio = `1 : ${fmtNum(row.students_per_librarian, 0)}`;
+  }
+
+  const grade4 = row && isNum(row.ela_pct_met_grade4) ? fmtNum(row.ela_pct_met_grade4, 1) + "%" : "n/a";
+
+  const trendPct = districtFteTrendPct(districtName);
+  let changeHtml = "n/a (no 2015–16 baseline)";
+  if (trendPct !== null) {
+    const color = trendPct < 0 ? "#E8998C" : "#8FC79B";
+    const sign = trendPct > 0 ? "+" : "";
+    changeHtml = `<span style="color:${color}">${sign}${fmtNum(trendPct, 0)}%</span>`;
+  }
+
+  tooltip.innerHTML = `
+    <span class="tt-title">${districtDisplayName(districtName)}</span>
+    ${label}<br>
+    FTE librarians: ${fte}<br>
+    Librarian-to-student ratio: ${ratio}<br>
+    Grade 4 at/above ELA standard: ${grade4}<br>
+    Staffing change since 2015&ndash;16: ${changeHtml}
+  `;
+  tooltip.style.display = "block";
+}
+
+function positionHomeMapTooltip(event) {
+  const tooltip = document.getElementById("homeMapTooltip");
+  const mapEl = document.getElementById("homeDistrictMap");
+  const wrapEl = mapEl.closest(".map-wrap");
+  const wrapRect = wrapEl.getBoundingClientRect();
+  const x = event.clientX - wrapRect.left;
+  const y = event.clientY - wrapRect.top;
+
+  const tw = tooltip.offsetWidth || 200;
+  const th = tooltip.offsetHeight || 80;
+  let left = x + 16;
+  let top = y + 16;
+  if (left + tw > wrapRect.width) left = x - tw - 16;
+  if (top + th > wrapRect.height) top = y - th - 16;
+
+  tooltip.style.left = left + "px";
+  tooltip.style.top = top + "px";
+}
+
+function renderHomeMapLegend() {
+  const el = document.getElementById("homeMapLegend");
+  if (!el) return;
+  el.innerHTML = ["has", "none"].map(cat =>
+    `<span><span class="swatch" style="background:${HOME_MAP_COLORS[cat]}"></span>${HOME_MAP_LABELS[cat]}</span>`
   ).join("");
 }
 
