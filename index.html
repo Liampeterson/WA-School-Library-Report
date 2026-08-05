@@ -2086,7 +2086,15 @@ function renderDistrictMap() {
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("preserveAspectRatio", "xMidYMid meet");
 
-  const projection = d3.geoMercator().fitSize([width, height], districtGeoJson);
+  const projection = d3.geoIdentity().reflectY(true).fitSize([width, height], districtGeoJson);
+  // geoIdentity treats coordinates as flat x/y rather than a true
+  // spherical projection -- appropriate for a small, single-state map,
+  // and it sidesteps a d3-geo bug we hit with geoMercator, where its
+  // antimeridian-clipping code injected a full-canvas rectangle into
+  // every feature's path data (this painted the whole map one flat
+  // color once enough features were stacked on top of each other).
+  // reflectY(true) flips the y-axis so north renders at the top, since
+  // geoIdentity otherwise passes latitude through unflipped.
   const pathGen = d3.geoPath().projection(projection);
 
   const localeColors = Object.assign({}, TIER_COLORS, { "Unclassified": "#B7B4A8" });
