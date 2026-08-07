@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Washington School Library Report Card</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -24,6 +24,12 @@
 
     --signal-down: #A23B2E; /* reserved strictly for declining data */
     --signal-up: #3C6B49;   /* reserved strictly for growing data */
+
+    /* Homepage-only dashboard elevation: cards sit on a white surface
+       above the cream canvas rather than flush with it. */
+    --surface: #FFFFFF;
+    --surface-alt: #F6F7F5;
+    --shadow-card: 0 2px 6px rgba(16,21,28,0.05), 0 10px 24px rgba(16,21,28,0.06);
   }
 
   * { box-sizing: border-box; }
@@ -121,6 +127,41 @@
     .nav-links { gap: 18px; flex-wrap: wrap; }
   }
 
+  /* ---- Homepage ticker: dark instrument strip under the masthead,
+     Home page only. The one deliberately bold element on this page --
+     everything else stays quiet around it. ---- */
+  .home-ticker {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 11px 56px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+
+  .home-ticker::-webkit-scrollbar { display: none; }
+
+  .home-ticker-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 22px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  .home-ticker-item { color: rgba(245,244,240,0.75); }
+
+  .home-ticker-item .arrow-down { color: #E8998C; font-weight: 700; }
+  .home-ticker-item .arrow-up { color: #8FC79B; font-weight: 700; }
+  .home-ticker-item strong { color: var(--bg); font-weight: 700; }
+
+  .home-ticker-sep { color: rgba(245,244,240,0.3); }
+
+  @media (max-width: 760px) {
+    .home-ticker { padding: 10px 20px; }
+  }
+
   /* ---- Page shell ---- */
   .page {
     max-width: 1180px;
@@ -162,6 +203,21 @@
     margin: 0 auto;
   }
 
+  /* ---- Homepage compact title bar: replaces the big centered hero on
+     Home only, so the map/chart row below is visible almost immediately. ---- */
+  .dashboard-title-bar {
+    padding: 0 0 28px;
+  }
+
+  .dashboard-title-bar h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.15;
+    margin: 8px 0 0;
+    letter-spacing: -0.01em;
+  }
+
   /* ---- Page sections: only one visible at a time, nav switches between them ---- */
   .page-section {
     display: none;
@@ -186,9 +242,10 @@
   .block-head .eyebrow { margin-bottom: 10px; }
 
   .block-head h2 {
-    font-family: 'Playfair Display', serif;
-    font-weight: 600;
-    font-size: 28px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 27px;
+    letter-spacing: -0.01em;
     margin: 0 0 10px;
   }
 
@@ -212,8 +269,9 @@
 
   .dashboard-card {
     border: 1px solid var(--rule-strong);
-    border-radius: 3px;
-    background: var(--bg);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
     overflow: hidden;
   }
 
@@ -227,7 +285,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 13px 18px;
-    background: var(--bg-alt);
+    background: var(--surface-alt);
     border-bottom: 1px solid var(--rule-strong);
   }
 
@@ -259,12 +317,45 @@
     padding: 20px 20px 16px;
   }
 
+  /* ---- Dramatic single-figure stat panel (homepage only) ---- */
+  .big-stat {
+    text-align: center;
+    padding: 14px 10px 18px;
+  }
+
+  .big-stat .eyebrow {
+    justify-content: center;
+  }
+
+  .big-stat-number {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 84px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin-top: 10px;
+  }
+
+  .big-stat-number.down { color: var(--signal-down); }
+  .big-stat-number.up { color: var(--signal-up); }
+
+  .big-stat-caption {
+    font-size: 13px;
+    color: var(--ink-soft);
+    max-width: 240px;
+    margin: 10px auto 0;
+    line-height: 1.5;
+  }
+
   /* ---- KPI grid: dense, gridlined, consulting-dashboard style ---- */
   .kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     border-top: 1px solid var(--rule-strong);
     border-left: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
   }
 
   @media (max-width: 820px) {
@@ -275,7 +366,7 @@
     padding: 22px 20px 18px;
     border-right: 1px solid var(--rule-strong);
     border-bottom: 1px solid var(--rule-strong);
-    background: var(--bg);
+    background: var(--surface);
     transition: background 0.15s ease, color 0.15s ease;
   }
 
@@ -302,15 +393,19 @@
   }
 
   .kpi-number {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 36px;
+    font-size: 34px;
     line-height: 1;
+    letter-spacing: -0.01em;
     transition: color 0.15s ease;
   }
 
   .kpi-number.down { color: var(--signal-down); }
   .kpi-number.up { color: var(--signal-up); }
+
+  .kpi-number.down::before { content: "\25BC"; font-size: 0.5em; margin-right: 5px; vertical-align: middle; }
+  .kpi-number.up::before { content: "\25B2"; font-size: 0.5em; margin-right: 5px; vertical-align: middle; }
 
   .kpi-sub {
     font-size: 12px;
@@ -608,23 +703,11 @@
   /* ---- Homepage district map (above 01 Overview) ---- */
   .home-map-row {
     display: grid;
-    grid-template-columns: minmax(220px, 300px) 1fr;
+    grid-template-columns: minmax(280px, 360px) 1fr;
     gap: 44px;
     align-items: start;
     padding-bottom: 56px;
     border-bottom: 1px solid var(--rule);
-  }
-
-  .home-map-copy h2 {
-    font-family: 'Playfair Display', serif;
-    font-weight: 600;
-    font-size: 26px;
-    margin: 10px 0 12px;
-  }
-
-  .home-map-copy .dek {
-    font-size: 14.5px;
-    color: var(--ink-soft);
   }
 
   @media (max-width: 900px) {
@@ -641,11 +724,21 @@
     background: var(--bg-alt);
   }
 
+  /* Homepage map: no card box around the state shape -- flush against
+     the page, finance-dashboard style, unlike the bordered panel used
+     on the District Report Card page. */
+  .map-wrap.map-wrap-flush {
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
   #districtMap {
     cursor: pointer;
   }
 
-  #districtMap svg {
+  #districtMap svg,
+  #homeDistrictMap svg {
     width: 100%;
     height: 100%;
     display: block;
@@ -688,6 +781,58 @@
     color: var(--ink-faint);
     margin-top: 10px;
     text-align: center;
+  }
+
+  /* ---- Homepage map CTA: the one filled/solid element on this page,
+     deliberately -- everything else here is hairlines and underlines,
+     so a solid block is what reads as "the thing to click." ---- */
+  .map-cta-wrap {
+    text-align: center;
+    margin-top: 22px;
+  }
+
+  .map-cta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 32px;
+    background: var(--accent);
+    color: #F5F4F0;
+    border: none;
+    border-radius: 2px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(29,52,84,0.18);
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  }
+
+  .map-cta-btn:hover {
+    background: #142640;
+    box-shadow: 0 8px 22px rgba(29,52,84,0.26);
+    transform: translateY(-1px);
+  }
+
+  .map-cta-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(29,52,84,0.2);
+  }
+
+  .map-cta-btn:focus-visible {
+    outline: 2px solid #F5F4F0;
+    outline-offset: 3px;
+  }
+
+  .map-cta-btn .arrow {
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+
+  .map-cta-btn:hover .arrow {
+    transform: translateX(3px);
   }
 
   .profile-search-wrap {
@@ -943,28 +1088,60 @@
     </ul>
   </header>
 
+  <div class="home-ticker" id="homeTicker">
+    <div class="home-ticker-inner">
+      <span class="home-ticker-item"><span class="arrow-down">&#9660;</span> <strong id="tickerStatChange">&mdash;</strong> in librarian staffing since 2015&ndash;16</span>
+      <span class="home-ticker-sep">&middot;</span>
+      <span class="home-ticker-item"><span class="arrow-down">&#9660;</span> <strong id="tickerStatZero">&mdash;</strong> of WA districts have zero librarians</span>
+      <span class="home-ticker-sep">&middot;</span>
+      <span class="home-ticker-item"><span class="arrow-down">&#9660;</span> <strong>68%</strong> of WA 4th graders not proficient in reading</span>
+    </div>
+  </div>
+
   <div class="page">
 
-    <section class="hero hero-centered">
-      <div class="eyebrow">Washington State &middot; OSPI Staffing Data &middot; 2015&ndash;16 to 2024&ndash;25</div>
-      <h1>The Decline of the<br>School Librarian in Washington</h1>
-      <p class="dek">A district-by-district look at ten years of certificated librarian staffing across Washington's public schools &mdash; where the positions disappeared, where they held on, and what it means for students.</p>
+    <section class="hero hero-centered" hidden>
+      <div class="eyebrow" id="heroEyebrow">Washington State &middot; OSPI Staffing Data &middot; 2015&ndash;16 to 2024&ndash;25</div>
+      <h1 id="heroTitle">The Decline of the<br>School Librarian in Washington</h1>
+      <p class="dek" id="heroDek">A district-by-district look at ten years of certificated librarian staffing across Washington's public schools &mdash; where the positions disappeared, where they held on, and what it means for students.</p>
     </section>
 
     <section class="block page-section active" id="overview">
+      <div class="dashboard-title-bar">
+        <div class="eyebrow">Washington State &middot; OSPI Staffing Data &middot; 2015&ndash;16 to 2024&ndash;25</div>
+        <h2>Library Staffing Dashboard</h2>
+      </div>
+
       <div class="home-map-row">
-        <div class="home-map-copy">
-          <div class="eyebrow">Washington at a glance</div>
-          <h2>Where the librarians are &mdash; and aren&rsquo;t</h2>
-          <p class="dek">Every public school district in Washington, colored by whether it employs a school librarian at all. Hover a district for its staffing and reading achievement detail.</p>
-          <!-- Further homepage copy/controls can be added here; deliberately left roomy. -->
+        <div class="home-map-side">
+          <div class="dashboard-card">
+            <div class="dashboard-card-header">
+              <h3>Librarian Access by Locale, 2024&ndash;25</h3>
+              <span class="dashboard-card-badge" id="homeLocaleBarBadge">&mdash;</span>
+            </div>
+            <div class="dashboard-card-body">
+              <div id="homeLocaleBarChart" style="height: 320px;"></div>
+            </div>
+          </div>
+
+          <div class="dashboard-card" style="margin-top:24px;">
+            <div class="dashboard-card-body big-stat">
+              <div class="eyebrow">Districts With No FTE Librarian</div>
+              <div class="big-stat-number down" id="homeZeroFtePct">&mdash;</div>
+              <div class="big-stat-caption" id="homeZeroFteCaption">&mdash;</div>
+            </div>
+          </div>
+          <!-- Further homepage panels can be added here; deliberately left roomy. -->
         </div>
         <div class="home-map-col">
-          <div class="map-wrap">
+          <div class="map-wrap map-wrap-flush">
             <div id="homeDistrictMap" style="height: 640px; position: relative;"></div>
             <div id="homeMapTooltip" class="map-tooltip"></div>
             <div class="tier-legend" id="homeMapLegend" style="justify-content:center;"></div>
             <div class="map-legend-note">Hover any district for staffing and achievement detail.</div>
+          </div>
+          <div class="map-cta-wrap">
+            <button class="map-cta-btn" id="homeMapCtaBtn" type="button">View Your District&rsquo;s Report Card <span class="arrow" aria-hidden="true">&rarr;</span></button>
           </div>
         </div>
       </div>
@@ -1087,12 +1264,6 @@
     </section>
 
     <section class="block page-section" id="districtProfile">
-      <div class="block-head">
-        <div class="eyebrow">02 &middot; District Report Card</div>
-        <h2>District Report Card</h2>
-        <p class="dek">Hover any district to see its staffing and achievement at a glance, colored by librarian staffing level &mdash; click it, or search below, to open its full library staffing report card.</p>
-      </div>
-
       <div class="map-wrap">
         <div id="districtMap" style="height: 560px; position: relative;"></div>
         <div id="mapTooltip" class="map-tooltip"></div>
@@ -1186,12 +1357,6 @@
     </section>
 
     <section class="block page-section" id="rankings">
-      <div class="block-head">
-        <div class="eyebrow">04 &middot; Rankings</div>
-        <h2>District rankings</h2>
-        <p class="dek">Rank all 298 districts by a chosen measure, for any year on record.</p>
-      </div>
-
       <div class="control-block">
         <span class="control-label">Rank by</span>
         <div class="btn-group" id="rankMetricButtons">
@@ -1221,14 +1386,6 @@
     </section>
 
     <section class="block page-section" id="correlation">
-      <div class="block-head">
-        <div class="eyebrow">05 &middot; Advanced Analysis</div>
-        <h2>Advanced Analysis</h2>
-        <p class="dek">Statistical views that go beyond the interactive charts elsewhere on this dashboard,
-        generated with Python (pandas, Seaborn, SciPy) &mdash; adding rigor to this project's strongest,
-        least-contestable finding: the gap in librarian access itself.</p>
-      </div>
-
       <div class="analysis-block">
         <h3 class="analysis-subhead">Is the Access Gap Statistically Significant?</h3>
         <p class="dek" style="margin-bottom:14px;">A chi-square test of independence between locale tier and
@@ -1385,6 +1542,7 @@ function init() {
   initTierCompareButtons();
   renderProfileFteChart(); // statewide-only default, before any district is searched
   loadDistrictMap();
+  renderHomeLocaleBarChart();
   initPageNav();
 }
 
@@ -1413,7 +1571,36 @@ function initPageNav() {
       showPage(item.dataset.target);
     });
   });
+
+  document.getElementById("homeMapCtaBtn").addEventListener("click", () => showPage("districtProfile"));
 }
+
+// Per-page hero content -- keeps the big centered header at the top of
+// the page in sync with whichever section is active, instead of always
+// showing the homepage's own title. "overview" matches the hero's
+// original hard-coded HTML, so nothing changes when returning home.
+const PAGE_HERO = {
+  overview: {
+    eyebrow: "Washington State &middot; OSPI Staffing Data &middot; 2015&ndash;16 to 2024&ndash;25",
+    title: "The Decline of the<br>School Librarian in Washington",
+    dek: "A district-by-district look at ten years of certificated librarian staffing across Washington's public schools &mdash; where the positions disappeared, where they held on, and what it means for students."
+  },
+  districtProfile: {
+    eyebrow: "02 &middot; District Report Card",
+    title: "District Report Card",
+    dek: "Hover any district to see its staffing and achievement at a glance, colored by librarian staffing level &mdash; click it, or search below, to open its full library staffing report card."
+  },
+  rankings: {
+    eyebrow: "04 &middot; Rankings",
+    title: "District Rankings",
+    dek: "Rank all 298 districts by a chosen measure, for any year on record."
+  },
+  correlation: {
+    eyebrow: "05 &middot; Advanced Analysis",
+    title: "Advanced Analysis",
+    dek: "Statistical views that go beyond the interactive charts elsewhere on this dashboard, generated with Python (pandas, Seaborn, SciPy) &mdash; adding rigor to this project's strongest, least-contestable finding: the gap in librarian access itself."
+  }
+};
 
 function showPage(targetId) {
   document.querySelectorAll(".page-section").forEach(section => {
@@ -1422,6 +1609,21 @@ function showPage(targetId) {
   document.querySelectorAll(".nav-link").forEach(link => {
     link.classList.toggle("active", link.dataset.target === targetId);
   });
+
+  const isHome = targetId === "overview";
+
+  // The homepage has its own compact ticker + title bar instead of the
+  // big centered hero used by every other page, so the map/chart row
+  // is visible almost immediately on load.
+  document.querySelector(".hero").hidden = isHome;
+  document.getElementById("homeTicker").hidden = !isHome;
+
+  const heroConfig = PAGE_HERO[targetId];
+  if (!isHome && heroConfig) {
+    document.getElementById("heroEyebrow").innerHTML = heroConfig.eyebrow;
+    document.getElementById("heroTitle").innerHTML = heroConfig.title;
+    document.getElementById("heroDek").innerHTML = heroConfig.dek;
+  }
 
   window.scrollTo(0, 0);
 
@@ -1461,6 +1663,14 @@ function renderStatCards() {
   ratios.sort((a,b) => a-b);
   const median = ratios.length ? ratios[Math.floor(ratios.length/2)] : null;
   document.getElementById("statRatio").textContent = median ? fmtNum(median,0) + ":1" : "\u2014";
+
+  // Homepage ticker and big-stat panel mirror these same figures, so
+  // they can never drift out of sync with the KPI tiles below them.
+  document.getElementById("tickerStatChange").textContent = fmtNum(pctChange, 0) + "%";
+  document.getElementById("tickerStatZero").textContent = fmtNum(zeroPct, 0) + "%";
+  document.getElementById("homeZeroFtePct").textContent = fmtNum(zeroPct, 0) + "%";
+  document.getElementById("homeZeroFteCaption").textContent =
+    `${zeroCount} of ${last.length} WA school districts report zero FTE librarians, 2024–25.`;
 }
 
 // ---- Statewide ELA achievement vs. librarian staffing, over time ----
@@ -1597,6 +1807,45 @@ function renderAchievementGapChart(year) {
     const lowest = withAch[0];
     const highest = withAch[withAch.length - 1];
     badgeEl.textContent = `${fmtNum(lowest.avgAch, 0)}% vs ${fmtNum(highest.avgAch, 0)}%`;
+  }
+}
+
+// ---- Homepage: Librarian Access by Locale (fixed to 2024-25, next to the map) ----
+function renderHomeLocaleBarChart() {
+  const rows = (byYear[GRADE_YEAR] || []).filter(r => r.locale_tier);
+
+  const stats = TIER_ORDER.map(tier => {
+    const tierRows = rows.filter(r => r.locale_tier === tier);
+    const n = tierRows.length;
+    const hasCount = tierRows.filter(r => (r.librarian_fte || 0) > 0).length;
+    return { tier, n, hasCount, pctHas: n ? (hasCount / n) * 100 : null };
+  });
+
+  Plotly.newPlot("homeLocaleBarChart", [{
+    type: "bar",
+    x: stats.map(s => s.tier),
+    y: stats.map(s => s.pctHas),
+    customdata: stats.map(s => [s.hasCount, s.n]),
+    marker: { color: stats.map(s => TIER_COLORS[s.tier]) },
+    text: stats.map(s => s.pctHas !== null ? `${fmtNum(s.pctHas, 0)}%` : "n/a"),
+    textposition: "outside",
+    hovertemplate: "%{x}<br>%{y:.0f}%% of districts have a librarian<br>%{customdata[0]} of %{customdata[1]} districts<extra></extra>"
+  }], {
+    margin: { t: 24, r: 10, l: 42, b: 78 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Plus Jakarta Sans, sans-serif", color: "#1A1A1A", size: 11.5 },
+    xaxis: { tickangle: -35, fixedrange: true },
+    yaxis: { title: "% with a librarian", gridcolor: "#E5E5E0", range: [0, 108], fixedrange: true },
+    dragmode: false
+  }, { displayModeBar: false, responsive: true });
+
+  const totalN = rows.length;
+  const totalHas = rows.filter(r => (r.librarian_fte || 0) > 0).length;
+  const badgeEl = document.getElementById("homeLocaleBarBadge");
+  if (badgeEl && totalN) {
+    const pct = (totalHas / totalN) * 100;
+    badgeEl.textContent = `${fmtNum(pct, 0)}% statewide`;
+    badgeEl.className = "dashboard-card-badge " + (pct >= 50 ? "up" : "down");
   }
 }
 
